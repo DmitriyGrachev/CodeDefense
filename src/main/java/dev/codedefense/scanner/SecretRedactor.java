@@ -7,7 +7,8 @@ public final class SecretRedactor {
     private static final String KEYS = "password|passwd|secret|apiKey|api_key|api-key|token|accessToken|access_token|clientSecret|client_secret|authorization";
     private static final Pattern JSON = Pattern.compile("(?i)(\"(?:" + KEYS + ")\"\\s*:\\s*\")(?!\\[REDACTED])((?:\\\\.|[^\"\\\\])*)(\")");
     private static final Pattern JSON_UNTERMINATED = Pattern.compile("(?i)(\"(?:" + KEYS + ")\"\\s*:\\s*\")((?:\\\\.|[^\"\\\\])*)$");
-    private static final Pattern QUOTED = Pattern.compile("(?im)(\\b(?:" + KEYS + ")\\b\\s*[:=]\\s*)([\"'])((?:\\\\.|[^\"'\\\\])*)([\"'])");
+    private static final Pattern DOUBLE_QUOTED = Pattern.compile("(?im)(\\b(?:" + KEYS + ")\\b\\s*[:=]\\s*\")(?!\\[REDACTED])((?:\\\\.|[^\"\\\\])*)(\")");
+    private static final Pattern SINGLE_QUOTED = Pattern.compile("(?im)(\\b(?:" + KEYS + ")\\b\\s*[:=]\\s*')(?!\\[REDACTED])((?:\\\\.|[^'\\\\])*)(')");
     private static final Pattern UNTERMINATED_DOUBLE = Pattern.compile("(?im)(\\b(?:" + KEYS + ")\\b\\s*[:=]\\s*\")((?:\\\\.|[^\"\\\\])*)$");
     private static final Pattern UNTERMINATED_SINGLE = Pattern.compile("(?im)(\\b(?:" + KEYS + ")\\b\\s*[:=]\\s*')((?:\\\\.|[^'\\\\])*)$");
     private static final Pattern QUOTED_YAML_KEY = Pattern.compile("(?im)([\"'](?:" + KEYS + ")[\"']\\s*:\\s*)(?!\\s*[\"'])([^\\r\\n]+)");
@@ -22,7 +23,8 @@ public final class SecretRedactor {
         Counter count = new Counter();
         String result = replaceJson(JSON, content, count);
         result = replaceUnterminatedJson(result, count);
-        result = replaceQuoted(QUOTED, result, count);
+        result = replaceQuoted(DOUBLE_QUOTED, result, count);
+        result = replaceQuoted(SINGLE_QUOTED, result, count);
         result = replaceUnterminatedAssignment(UNTERMINATED_DOUBLE, result, count);
         result = replaceUnterminatedAssignment(UNTERMINATED_SINGLE, result, count);
         result = replaceJson(QUOTED_YAML_DOUBLE, result, count);
@@ -47,7 +49,7 @@ public final class SecretRedactor {
     }
     private String replaceQuoted(Pattern pattern, String input, Counter count) {
         Matcher matcher = pattern.matcher(input); StringBuffer out = new StringBuffer();
-        while (matcher.find()) { count.value++; matcher.appendReplacement(out, Matcher.quoteReplacement(matcher.group(1) + matcher.group(2) + "[REDACTED]" + matcher.group(4))); }
+        while (matcher.find()) { count.value++; matcher.appendReplacement(out, Matcher.quoteReplacement(matcher.group(1) + "[REDACTED]" + matcher.group(3))); }
         matcher.appendTail(out); return out.toString();
     }
     private String replaceBearer(String input, Counter count) {

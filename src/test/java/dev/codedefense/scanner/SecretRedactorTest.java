@@ -45,4 +45,20 @@ class SecretRedactorTest {
             assertEquals(1, result.content().split("\\[REDACTED]", -1).length - 1, value);
         }
     }
+
+    @Test
+    void keepsTheMatchingQuoteDelimiterWhenRedactingAssignments() {
+        assertRedacted("password=\"O'Reilly-TOPSECRET\"", "password=\"[REDACTED]\"");
+        assertRedacted("password='abc\"TOPSECRET'", "password='[REDACTED]'");
+        assertRedacted("password=\"abc'TOPSECRET-without-closing", "password=\"[REDACTED]");
+        assertRedacted("password='abc\"TOPSECRET-without-closing", "password='[REDACTED]");
+    }
+
+    private void assertRedacted(String input, String expected) {
+        var result = redactor.redact(input);
+        assertFalse(result.content().contains("TOPSECRET"), input);
+        assertEquals(1, result.content().split("\\[REDACTED]", -1).length - 1, input);
+        assertEquals(1, result.replacementCount(), input);
+        assertEquals(expected, result.content());
+    }
 }

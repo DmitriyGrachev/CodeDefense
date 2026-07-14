@@ -25,7 +25,7 @@ public final class ProjectSnapshotBuilder {
             var read = reader.read(summary.root(), summary.root().resolve(source.relativePath()), config.maximumFileBlockBytes());
             if (!read.available()) continue;
             String raw = read.content();
-            SecretRedactor.RedactionResult result = redactor.redact(raw); redactions += result.replacementCount();
+            SecretRedactor.RedactionResult result = redactor.redact(raw);
             String numbered = formatter.format(result.content()); String path = source.relativePath().toString().replace('\\', '/');
             String block = block(path, language(path), numbered, false); int limit = Math.min(remaining, config.maximumFileBlockBytes());
             boolean truncated = budget.utf8Bytes(block + "\n") > limit || read.truncated();
@@ -35,7 +35,7 @@ public final class ProjectSnapshotBuilder {
             if (lines == 0) continue;
             block = block(path, language(path), contentOnly(block), truncated);
             if (budget.utf8Bytes(block + "\n") > limit) continue;
-            prompt.append(block).append('\n'); selected.add(new ProjectSnapshot.SelectedFile(source.relativePath(), lines, truncated, budget.utf8Bytes(block + "\n")));
+            prompt.append(block).append('\n'); redactions += result.replacementCount(); selected.add(new ProjectSnapshot.SelectedFile(source.relativePath(), lines, truncated, budget.utf8Bytes(block + "\n")));
         }
         String content = prompt.toString(); if (selected.isEmpty()) throw new EmptyProjectSnapshotException(); if (budget.utf8Bytes(content) > config.maximumSnapshotBytes()) throw new IllegalStateException("Snapshot exceeds configured byte limit"); return new ProjectSnapshot(summary.root(), name, type, summary, selected, content, budget.utf8Bytes(content), redactions);
     }

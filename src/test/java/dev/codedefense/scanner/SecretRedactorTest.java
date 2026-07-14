@@ -22,5 +22,16 @@ class SecretRedactorTest {
     @Test
     void preservesOrdinaryMethodCalls() {
         assertEquals("tokenService.create()", redactor.redact("tokenService.create()").content());
+        assertEquals("accessTokenProvider.load()", redactor.redact("accessTokenProvider.load()").content());
+    }
+
+    @Test
+    void redactsEverySupportedSingleLineFormExactlyOnce() {
+        String[] values = {"token=abc", "password: p@ss,word", "apiKey: abc}def", "password=\"secret\"", "password='secret'", "apiKey: \"abc123\"", "Authorization: Bearer abc.def", "{\"token\": \"secret\"}", "{\"token\": \"abc\\\"def\"}", "{\"token\": \"abc\\\\def\"}", "{\"token\": \"secret-without-closing"};
+        for (String value : values) {
+            var result = redactor.redact(value);
+            assertEquals(1, result.replacementCount(), value);
+            assertEquals(1, result.content().split("\\[REDACTED]", -1).length - 1, value);
+        }
     }
 }

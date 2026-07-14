@@ -4,6 +4,7 @@ import dev.codedefense.domain.ScanSummary;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -63,6 +64,13 @@ class FileSystemProjectScannerTest {
     }
 
     @Test
+    void acceptsUppercaseJavaExtension() throws IOException {
+        write("Example.JAVA");
+
+        assertEquals(1, scan(temporaryDirectory).acceptedCandidateCount());
+    }
+
+    @Test
     void acceptsTypeScriptSource() throws IOException {
         write("app.ts");
 
@@ -84,7 +92,20 @@ class FileSystemProjectScannerTest {
         ScanSummary summary = scan(temporaryDirectory);
 
         assertEquals(1, summary.acceptedCandidateCount());
+        assertEquals(2, summary.discoveredFileCount());
         assertEquals(1, summary.ignoredFileCount());
+    }
+
+    @Test
+    void countsAcceptedAndUnsupportedRegularFiles() throws IOException {
+        write("App.java");
+        write("notes.txt");
+
+        ScanSummary summary = scan(temporaryDirectory);
+
+        assertEquals(2, summary.discoveredFileCount());
+        assertEquals(1, summary.ignoredFileCount());
+        assertEquals(1, summary.acceptedCandidateCount());
     }
 
     @Test
@@ -95,8 +116,21 @@ class FileSystemProjectScannerTest {
 
         ScanSummary summary = scan(temporaryDirectory);
 
-        assertEquals(1, summary.acceptedCandidateCount());
+        assertEquals(3, summary.discoveredFileCount());
         assertEquals(2, summary.ignoredFileCount());
+        assertEquals(1, summary.acceptedCandidateCount());
+    }
+
+    @Test
+    void ordersCandidatesByRelativePath() throws IOException {
+        write("z.ts");
+        write("nested/Middle.py");
+        write("A.java");
+
+        ScanSummary summary = scan(temporaryDirectory);
+
+        assertEquals(List.of(Path.of("A.java"), Path.of("nested", "Middle.py"), Path.of("z.ts")),
+                summary.candidates().stream().map(file -> file.relativePath()).toList());
     }
 
     @Test

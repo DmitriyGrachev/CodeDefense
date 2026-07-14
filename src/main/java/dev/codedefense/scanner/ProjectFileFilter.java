@@ -30,7 +30,8 @@ public final class ProjectFileFilter {
 
     public boolean isSupportedFile(Path file) {
         String name = fileName(file);
-        return SUPPORTED_NAMES.contains(name) || SUPPORTED_EXTENSIONS.stream().anyMatch(name::endsWith);
+        String lowercaseName = name.toLowerCase(Locale.ROOT);
+        return SUPPORTED_NAMES.contains(name) || SUPPORTED_EXTENSIONS.stream().anyMatch(lowercaseName::endsWith);
     }
 
     public boolean isExcludedFile(Path file) {

@@ -72,7 +72,7 @@ public final class FileSystemProjectScanner implements ProjectScanner {
 
         @Override
         public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
-            if (!directory.equals(root) && (Files.isSymbolicLink(directory) || filter.isExcludedDirectory(directory))) {
+            if (!directory.equals(root) && (attributes.isSymbolicLink() || filter.isExcludedDirectory(directory))) {
                 return FileVisitResult.SKIP_SUBTREE;
             }
             return FileVisitResult.CONTINUE;
@@ -80,15 +80,11 @@ public final class FileSystemProjectScanner implements ProjectScanner {
 
         @Override
         public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
-            if (Files.isSymbolicLink(file)) {
+            discoveredFileCount++;
+            if (attributes.isSymbolicLink() || !attributes.isRegularFile()) {
                 ignoredFileCount++;
                 return FileVisitResult.CONTINUE;
             }
-            if (!attributes.isRegularFile()) {
-                return FileVisitResult.CONTINUE;
-            }
-
-            discoveredFileCount++;
             if (filter.isExcludedFile(file) || !filter.isSupportedFile(file)) {
                 ignoredFileCount++;
                 return FileVisitResult.CONTINUE;

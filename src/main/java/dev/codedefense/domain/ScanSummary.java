@@ -11,6 +11,9 @@ public record ScanSummary(Path root, int discoveredFileCount, int ignoredFileCou
         if (discoveredFileCount < 0 || ignoredFileCount < 0) {
             throw new IllegalArgumentException("Scan counts cannot be negative");
         }
+        if (discoveredFileCount != ignoredFileCount + candidates.size()) {
+            throw new IllegalArgumentException("Discovered files must equal ignored files plus accepted candidates");
+        }
     }
 
     public int acceptedCandidateCount() {

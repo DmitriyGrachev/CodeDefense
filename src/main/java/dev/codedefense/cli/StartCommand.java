@@ -8,6 +8,7 @@ import dev.codedefense.scanner.ProjectScanner;
 import dev.codedefense.scanner.ScanPolicy;
 import dev.codedefense.scanner.ProjectSnapshotBuilder;
 import dev.codedefense.application.CodeDefenseConfig;
+import dev.codedefense.domain.EmptyProjectSnapshotException;
 import dev.codedefense.terminal.ConfirmationPrompt;
 import dev.codedefense.terminal.ConsoleConfirmationPrompt;
 import java.nio.file.Path;
@@ -54,11 +55,11 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             ScanSummary summary = scanner.scan(path, ScanPolicy.defaults());
             var snapshot = snapshotBuilder.build(summary);
             commandSpec.commandLine().getOut().printf(
-                    "Project: %s%nDetected type: %s%nDiscovered files: %d%nIgnored files: %d%nAccepted candidates: %d%nSelected files: %d / 30%nSnapshot bytes: %d / 122880%nTruncated files: %d%nRedactions: %d%n",
+                    "Project: %s%nDetected type: %s%nDiscovered files: %d%nIgnored files: %d%nAccepted candidates: %d%nSelected files: %d / %d%nSnapshot bytes: %d / %d%nTruncated files: %d%nRedactions: %d%n",
                     snapshot.projectName(), snapshot.projectType(),
                     summary.discoveredFileCount(),
                     summary.ignoredFileCount(),
-                    summary.acceptedCandidateCount(), snapshot.selectedFiles().size(), snapshot.promptBytes(), snapshot.selectedFiles().stream().filter(file -> file.truncated()).count(), snapshot.redactionCount()
+                    summary.acceptedCandidateCount(), snapshot.selectedFiles().size(), snapshotBuilder.config().maximumSelectedFiles(), snapshot.promptBytes(), snapshotBuilder.config().maximumSnapshotBytes(), snapshot.selectedFiles().stream().filter(file -> file.truncated()).count(), snapshot.redactionCount()
             );
             snapshot.selectedFiles().forEach(file -> commandSpec.commandLine().getOut().println(file.relativePath() + " (" + file.renderedBytes() + " bytes)"));
             if (dryRun) { commandSpec.commandLine().getOut().println("No source content was sent."); commandSpec.commandLine().getOut().println("Codex was not invoked."); return ExitCodes.SUCCESS; }
@@ -71,6 +72,9 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             commandSpec.commandLine().getErr().println(exception.getMessage());
             return ExitCodes.INVALID_PROJECT_PATH;
         } catch (NoSupportedSourceFilesException exception) {
+            commandSpec.commandLine().getErr().println(exception.getMessage());
+            return ExitCodes.NO_SUPPORTED_SOURCE_FILES;
+        } catch (EmptyProjectSnapshotException exception) {
             commandSpec.commandLine().getErr().println(exception.getMessage());
             return ExitCodes.NO_SUPPORTED_SOURCE_FILES;
         }

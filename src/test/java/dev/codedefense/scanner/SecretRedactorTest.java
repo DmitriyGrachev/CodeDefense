@@ -37,7 +37,7 @@ class SecretRedactorTest {
 
     @Test
     void redactsUnterminatedAssignmentsAndQuotedYamlKeys() {
-        String[] values = {"password=\"TOPSECRET-without-closing", "apiKey: \"TOPSECRET-without-closing", "client_secret='TOPSECRET-without-closing", "\"password\": secret", "'password': 'secret'"};
+        String[] values = {"password=\"TOPSECRET-without-closing", "apiKey: \"TOPSECRET-without-closing", "client_secret='TOPSECRET-without-closing", "password=\"abc\\\"TOPSECRET-without-closing", "client_secret='abc\\'TOPSECRET-without-closing", "\"password\": secret", "\"password\": \"TOPSECRET\"", "\"password\": 'TOPSECRET'", "'password': \"TOPSECRET\"", "'password': 'TOPSECRET'", "\"password\": \"TOPSECRET-without-closing", "\"password\": 'TOPSECRET-without-closing", "'password': \"TOPSECRET-without-closing", "'password': 'TOPSECRET-without-closing"};
         for (String value : values) {
             var result = redactor.redact(value);
             assertFalse(result.content().contains("TOPSECRET"));

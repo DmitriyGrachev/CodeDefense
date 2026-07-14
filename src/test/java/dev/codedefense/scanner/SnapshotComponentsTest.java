@@ -30,9 +30,9 @@ class SnapshotComponentsTest {
     @Test void buildsBoundedRedactedDeterministicSnapshot() throws Exception {
         Files.writeString(temp.resolve("App.java"), "password=very-secret\n" + "😀".repeat(100), StandardCharsets.UTF_8);
         var summary = new ScanSummary(temp, 1, 0, List.of(new SourceFile(Path.of("App.java"), Files.size(temp.resolve("App.java")))));
-        var snapshot = new ProjectSnapshotBuilder(new CodeDefenseConfig(30, 400, 200)).build(summary);
-        assertTrue(snapshot.promptBytes() <= 400); assertEquals(snapshot.promptBytes(), snapshot.promptContent().getBytes(StandardCharsets.UTF_8).length);
+        var snapshot = new ProjectSnapshotBuilder(new CodeDefenseConfig(30, 2_000, 1_000)).build(summary);
+        assertTrue(snapshot.promptBytes() <= 2_000); assertEquals(snapshot.promptBytes(), snapshot.promptContent().getBytes(StandardCharsets.UTF_8).length);
         assertFalse(snapshot.promptContent().contains(temp.toString())); assertFalse(snapshot.promptContent().contains("very-secret"));
-        assertEquals(snapshot.promptContent(), new ProjectSnapshotBuilder(new CodeDefenseConfig(30, 400, 200)).build(summary).promptContent());
+        assertEquals(snapshot.promptContent(), new ProjectSnapshotBuilder(new CodeDefenseConfig(30, 2_000, 1_000)).build(summary).promptContent());
     }
 }

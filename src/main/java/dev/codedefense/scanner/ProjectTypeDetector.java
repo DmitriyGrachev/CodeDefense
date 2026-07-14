@@ -1,14 +1,14 @@
 package dev.codedefense.scanner;
 
 import dev.codedefense.domain.ScanSummary;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 
 public final class ProjectTypeDetector {
     private static final int MANIFEST_LIMIT = 16 * 1024;
+    private final BoundedTextFileReader reader;
+    public ProjectTypeDetector() { this(new BoundedTextFileReader()); }
+    ProjectTypeDetector(BoundedTextFileReader reader) { this.reader = reader; }
     public String detect(ScanSummary summary) {
         Set<String> names = summary.candidates().stream().map(file -> file.relativePath().getFileName().toString()).collect(java.util.stream.Collectors.toSet());
         String pom = read(summary.root().resolve("pom.xml"));
@@ -27,5 +27,5 @@ public final class ProjectTypeDetector {
         if (names.stream().anyMatch(name -> name.endsWith(".py"))) return "Python";
         return "Generic";
     }
-    private String read(Path path) { try { if (!Files.isRegularFile(path)) return ""; byte[] bytes = Files.readAllBytes(path); return new String(bytes, 0, Math.min(bytes.length, MANIFEST_LIMIT), StandardCharsets.UTF_8); } catch (IOException ignored) { return ""; } }
+    private String read(Path path) { return reader.read(path.getParent(), path, MANIFEST_LIMIT).content(); }
 }

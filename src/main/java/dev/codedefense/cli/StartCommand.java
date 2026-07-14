@@ -9,6 +9,7 @@ import dev.codedefense.scanner.ScanPolicy;
 import dev.codedefense.scanner.ProjectSnapshotBuilder;
 import dev.codedefense.application.CodeDefenseConfig;
 import dev.codedefense.terminal.ConfirmationPrompt;
+import dev.codedefense.terminal.ConsoleConfirmationPrompt;
 import java.nio.file.Path;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -33,10 +34,7 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
     private CommandSpec commandSpec;
 
     public StartCommand() {
-        this(new FileSystemProjectScanner(), new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()), prompt -> {
-            java.io.Console console = System.console();
-            return console != null && "y".equalsIgnoreCase(console.readLine("%s ", prompt).trim());
-        });
+        this(new FileSystemProjectScanner(), new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()), new ConsoleConfirmationPrompt());
     }
 
     StartCommand(ProjectScanner scanner) {
@@ -56,16 +54,17 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             ScanSummary summary = scanner.scan(path, ScanPolicy.defaults());
             var snapshot = snapshotBuilder.build(summary);
             commandSpec.commandLine().getOut().printf(
-                    "Discovered files: %d%nIgnored files: %d%nAccepted candidates: %d%nSelected files: %d%nSnapshot bytes: %d%n",
+                    "Project: %s%nDetected type: %s%nDiscovered files: %d%nIgnored files: %d%nAccepted candidates: %d%nSelected files: %d / 30%nSnapshot bytes: %d / 122880%nTruncated files: %d%nRedactions: %d%n",
+                    snapshot.projectName(), snapshot.projectType(),
                     summary.discoveredFileCount(),
                     summary.ignoredFileCount(),
-                    summary.acceptedCandidateCount(), snapshot.selectedFiles().size(), snapshot.promptBytes()
+                    summary.acceptedCandidateCount(), snapshot.selectedFiles().size(), snapshot.promptBytes(), snapshot.selectedFiles().stream().filter(file -> file.truncated()).count(), snapshot.redactionCount()
             );
             snapshot.selectedFiles().forEach(file -> commandSpec.commandLine().getOut().println(file.relativePath() + " (" + file.renderedBytes() + " bytes)"));
-            if (dryRun) return ExitCodes.SUCCESS;
+            if (dryRun) { commandSpec.commandLine().getOut().println("No source content was sent."); commandSpec.commandLine().getOut().println("Codex was not invoked."); return ExitCodes.SUCCESS; }
             String prompt = "Send selected snapshot to Codex? [y/N]";
-            if (!yes && System.console() == null) commandSpec.commandLine().getOut().println(prompt);
-            if (!yes && !confirmation.confirm(prompt)) return ExitCodes.SUCCESS;
+            if (!yes) commandSpec.commandLine().getOut().println(prompt);
+            if (!yes && !confirmation.confirm(prompt)) { commandSpec.commandLine().getOut().println("Cancelled before any source content was sent."); return ExitCodes.SUCCESS; }
             commandSpec.commandLine().getOut().println("Codex execution arrives in Iteration 4.");
             return ExitCodes.SUCCESS;
         } catch (InvalidProjectPathException exception) {

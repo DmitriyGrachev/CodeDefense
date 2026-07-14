@@ -1,10 +1,16 @@
 package dev.codedefense.cli;
 
 import dev.codedefense.CodeDefenseApplication;
+import dev.codedefense.domain.ScanSummary;
+import dev.codedefense.domain.SourceFile;
+import dev.codedefense.scanner.InvalidProjectPathException;
+import dev.codedefense.scanner.NoSupportedSourceFilesException;
+import dev.codedefense.scanner.ProjectScanner;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import picocli.CommandLine;
 
@@ -54,6 +60,39 @@ class CliFoundationTest {
         assertDoesNotThrow(() -> CodeDefenseApplication.createCommandLine().execute("start"));
         assertDoesNotThrow(() -> CodeDefenseApplication.createCommandLine().execute("sample"));
         assertDoesNotThrow(() -> CodeDefenseApplication.createCommandLine().execute("report"));
+    }
+
+    @Test
+    void dryRunUsesInjectedScannerAndConfiguredOutput() {
+        ProjectScanner scanner = (root, policy) -> new ScanSummary(
+                root, 1, 0, List.of(new SourceFile(Path.of("App.java")))
+        );
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        CommandLine commandLine = new CommandLine(new StartCommand(scanner));
+        commandLine.setOut(new PrintWriter(output, true, StandardCharsets.UTF_8));
+
+        assertEquals(ExitCodes.SUCCESS, commandLine.execute("--dry-run", "."));
+        assertTrue(output.toString(StandardCharsets.UTF_8).contains("Accepted candidates: 1"));
+    }
+
+    @Test
+    void dryRunMapsInvalidDirectoryToDocumentedExitCode() {
+        ProjectScanner scanner = (root, policy) -> {
+            throw new InvalidProjectPathException("Project path does not exist: " + root);
+        };
+
+        assertEquals(ExitCodes.INVALID_PROJECT_PATH,
+                new CommandLine(new StartCommand(scanner)).execute("--dry-run", "missing"));
+    }
+
+    @Test
+    void dryRunMapsEmptyProjectToDocumentedExitCode() {
+        ProjectScanner scanner = (root, policy) -> {
+            throw new NoSupportedSourceFilesException("No supported source files found: " + root);
+        };
+
+        assertEquals(ExitCodes.NO_SUPPORTED_SOURCE_FILES,
+                new CommandLine(new StartCommand(scanner)).execute("--dry-run", "."));
     }
 
     private CommandLine commandLineWithOutput(ByteArrayOutputStream output) {

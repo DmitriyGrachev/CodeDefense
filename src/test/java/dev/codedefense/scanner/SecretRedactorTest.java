@@ -34,4 +34,15 @@ class SecretRedactorTest {
             assertEquals(1, result.content().split("\\[REDACTED]", -1).length - 1, value);
         }
     }
+
+    @Test
+    void redactsUnterminatedAssignmentsAndQuotedYamlKeys() {
+        String[] values = {"password=\"TOPSECRET-without-closing", "apiKey: \"TOPSECRET-without-closing", "client_secret='TOPSECRET-without-closing", "\"password\": secret", "'password': 'secret'"};
+        for (String value : values) {
+            var result = redactor.redact(value);
+            assertFalse(result.content().contains("TOPSECRET"));
+            assertEquals(1, result.replacementCount(), value);
+            assertEquals(1, result.content().split("\\[REDACTED]", -1).length - 1, value);
+        }
+    }
 }

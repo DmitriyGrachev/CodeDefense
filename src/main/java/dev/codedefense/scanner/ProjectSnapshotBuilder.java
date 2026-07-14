@@ -41,8 +41,9 @@ public final class ProjectSnapshotBuilder {
     }
     public CodeDefenseConfig config() { return config; }
     private String fit(String path, String language, String numbered, int limit) {
-        String candidate = block(path, language, "", true); int header = budget.utf8Bytes(candidate); if (header >= limit) return null;
-        StringBuilder included = new StringBuilder(); for (String line : numbered.split("\n", -1)) { String next = included + line + "\n"; if (budget.utf8Bytes(block(path, language, next, true)) > limit) { String prefix=budget.prefix(line + "\n", Math.max(0, limit - budget.utf8Bytes(block(path,language,included.toString(),true)))); if (!prefix.isBlank()) included.append(prefix); break; } included.append(line).append('\n'); }
+        int blockLimit = limit - 1;
+        String candidate = block(path, language, "", true); int header = budget.utf8Bytes(candidate); if (header >= blockLimit) return null;
+        StringBuilder included = new StringBuilder(); for (String line : numbered.split("\n", -1)) { String next = included + line + "\n"; if (budget.utf8Bytes(block(path, language, next, true)) > blockLimit) { String prefix=budget.prefix(line + "\n", Math.max(0, blockLimit - budget.utf8Bytes(block(path,language,included.toString(),true)))); if (!prefix.isBlank()) included.append(prefix); break; } included.append(line).append('\n'); }
         return block(path, language, included.toString(), true);
     }
     private String contentOnly(String block) { int index = block.indexOf("\n", block.indexOf("TRUNCATED:")); return index < 0 ? "" : block.substring(index + 1); }

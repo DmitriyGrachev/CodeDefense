@@ -90,7 +90,7 @@ public final class FileSystemProjectScanner implements ProjectScanner {
                 return FileVisitResult.CONTINUE;
             }
 
-            candidates.add(new SourceFile(root.relativize(file)));
+            candidates.add(new SourceFile(root.relativize(file), attributes.size()));
             return FileVisitResult.CONTINUE;
         }
 

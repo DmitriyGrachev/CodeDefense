@@ -65,7 +65,7 @@ class CliFoundationTest {
     @Test
     void dryRunUsesInjectedScannerAndConfiguredOutput() {
         ProjectScanner scanner = (root, policy) -> new ScanSummary(
-                root, 1, 0, List.of(new SourceFile(Path.of("App.java")))
+                root, 1, 0, List.of(new SourceFile(Path.of("pom.xml")))
         );
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         CommandLine commandLine = new CommandLine(new StartCommand(scanner));

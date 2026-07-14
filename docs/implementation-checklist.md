@@ -3,7 +3,7 @@
 - [x] Iteration 0 — scope, repository policy, and architecture documentation.
 - [x] Iteration 1 — executable Picocli foundation and shaded JAR.
 - [x] Iteration 2 — deterministic filesystem discovery and filtering.
-- [ ] Iteration 3 — prioritization, redaction, and bounded snapshots.
+- [x] Iteration 3 — prioritization, redaction, and bounded snapshots.
 - [ ] Iteration 4 — Codex environment checking and process adapter.
 - [ ] Iteration 5 — project analysis and terminal overview.
 - [ ] Iteration 6 — adaptive three-question interview.

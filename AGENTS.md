@@ -43,3 +43,13 @@ Run before completing an iteration:
 
 ```bash
 mvn clean verify
+```
+
+For CLI or packaging changes also run:
+
+```bash
+mvn package
+java -jar target/codedefense.jar --help
+```
+
+Report the exact commands and their results.

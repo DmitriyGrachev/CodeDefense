@@ -4,7 +4,6 @@ import dev.codedefense.ai.exception.CodexExecutionException;
 import dev.codedefense.ai.exception.CodexNotAuthenticatedException;
 import dev.codedefense.ai.exception.CodexNotInstalledException;
 import dev.codedefense.ai.exception.CodexTimeoutException;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -81,11 +80,8 @@ public final class CodexEnvironmentChecker implements CodexPreflight {
             ProcessResult versionResult;
             try {
                 versionResult = processExecutor.execute(specification(candidate.commandPrefix(), List.of("--version")));
-            } catch (IllegalStateException exception) {
-                if (hasIOExceptionCause(exception)) {
-                    continue;
-                }
-                throw startFailure(exception);
+            } catch (ProcessStartException exception) {
+                continue;
             } catch (RuntimeException exception) {
                 throw startFailure(exception);
             }
@@ -172,17 +168,6 @@ public final class CodexEnvironmentChecker implements CodexPreflight {
         return new CodexExecutionException(-1, "Codex version check could not start.", exception);
     }
 
-    private static boolean hasIOExceptionCause(Throwable exception) {
-        Throwable current = exception;
-        while (current != null) {
-            if (current instanceof IOException) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
-    }
-
     private static Path requireExistingDirectory(Path path) {
         Objects.requireNonNull(path, "Working directory");
         if (!Files.isDirectory(path)) {
@@ -193,7 +178,7 @@ public final class CodexEnvironmentChecker implements CodexPreflight {
 
     private static List<CodexExecutable> candidatesFor(String operatingSystem) {
         Objects.requireNonNull(operatingSystem, "Operating system");
-        if (operatingSystem.toLowerCase(Locale.ROOT).contains("win")) {
+        if (operatingSystem.toLowerCase(Locale.ROOT).startsWith("windows")) {
             return List.of(
                     new CodexExecutable(List.of("codex")),
                     new CodexExecutable(List.of("codex.exe")),

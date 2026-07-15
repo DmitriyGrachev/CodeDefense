@@ -10,7 +10,6 @@ import dev.codedefense.ai.exception.CodexExecutionException;
 import dev.codedefense.ai.exception.CodexNotAuthenticatedException;
 import dev.codedefense.ai.exception.CodexNotInstalledException;
 import dev.codedefense.ai.exception.CodexTimeoutException;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayDeque;
@@ -67,6 +66,17 @@ class CodexEnvironmentCheckerTest {
                 List.of("codex.exe", "--version"),
                 List.of("codex.cmd", "--version"),
                 List.of("codex.cmd", "login", "status")));
+    }
+
+    @Test
+    void doesNotTreatDarwinAsWindows() {
+        FakeProcessExecutor executor = new FakeProcessExecutor(result(0, "codex 2", ""), result(0, "", ""));
+
+        checker(executor, Map.of(), "Darwin").checkReady();
+
+        assertCommands(executor.specifications(), List.of(
+                List.of("codex", "--version"),
+                List.of("codex", "login", "status")));
     }
 
     @Test
@@ -161,7 +171,7 @@ class CodexEnvironmentCheckerTest {
     }
 
     @Test
-    void doesNotClassifyUnrelatedIllegalStateExceptionAsNotInstalled() {
+    void mapsUnrelatedIllegalStateExceptionToExecutionFailureRatherThanNotInstalled() {
         FakeProcessExecutor executor = new FakeProcessExecutor(new IllegalStateException("executor defect"));
 
         CodexExecutionException exception = assertThrows(
@@ -201,8 +211,8 @@ class CodexEnvironmentCheckerTest {
         return new ProcessResult(-1, "", "", false, false, true, Duration.ZERO);
     }
 
-    private static IllegalStateException missingExecutable() {
-        return new IllegalStateException("Unable to start process", new IOException("not found"));
+    private static ProcessStartException missingExecutable() {
+        return new ProcessStartException(new java.io.IOException("not found"));
     }
 
     private static void assertCommands(List<ProcessSpec> specifications, List<List<String>> expectedCommands) {

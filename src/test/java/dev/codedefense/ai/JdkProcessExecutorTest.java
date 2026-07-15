@@ -2,6 +2,7 @@ package dev.codedefense.ai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -181,6 +182,21 @@ class JdkProcessExecutorTest {
 
         assertFalse(worker.isAlive());
         assertTrue(interruptFlagPreserved.get());
+    }
+
+    @Test
+    void throwsTypedExceptionOnlyWhenTheProcessCannotStart() {
+        ProcessSpec specification = new ProcessSpec(
+                List.of(temporaryDirectory.resolve("missing-command").toString()),
+                temporaryDirectory,
+                Map.of(),
+                "",
+                Duration.ofSeconds(1),
+                Duration.ofMillis(100),
+                64,
+                64);
+
+        assertThrows(ProcessStartException.class, () -> new JdkProcessExecutor().execute(specification));
     }
 
     private ProcessSpec spec(String mode, String standardInput, String... arguments) {

@@ -72,7 +72,7 @@ public final class JdkProcessExecutor implements ProcessExecutor {
         try {
             return builder.start();
         } catch (IOException exception) {
-            throw new IllegalStateException("Unable to start process", exception);
+            throw new ProcessStartException(exception);
         }
     }
 

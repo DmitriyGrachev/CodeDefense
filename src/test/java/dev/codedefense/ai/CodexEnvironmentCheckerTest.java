@@ -7,9 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.codedefense.ai.exception.CodexExecutionException;
+import dev.codedefense.ai.exception.CodexInterruptedException;
 import dev.codedefense.ai.exception.CodexNotAuthenticatedException;
 import dev.codedefense.ai.exception.CodexNotInstalledException;
 import dev.codedefense.ai.exception.CodexTimeoutException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayDeque;
@@ -54,18 +56,33 @@ class CodexEnvironmentCheckerTest {
     }
 
     @Test
-    void resolvesCodexCmdAfterWindowsCandidatesFailToLaunch() {
-        FakeProcessExecutor executor = new FakeProcessExecutor(
-                missingExecutable(), missingExecutable(), result(0, "codex 2", ""), result(0, "", ""));
+    void usesTheResolvedWindowsNpmPowerShellShimForVersionAndLogin() throws Exception {
+        Path npmDirectory = Files.createDirectories(temporaryDirectory.resolve("npm"));
+        Files.writeString(npmDirectory.resolve("codex"), "unix shim");
+        Files.writeString(npmDirectory.resolve("codex.cmd"), "cmd shim");
+        Path powerShellShim = Files.writeString(npmDirectory.resolve("codex.ps1"), "powershell shim");
+        Path systemRoot = temporaryDirectory.resolve("Windows");
+        List<String> prefix = List.of(
+                systemRoot.resolve("System32/WindowsPowerShell/v1.0/powershell.exe").toString(),
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                powerShellShim.toString());
+        FakeProcessExecutor executor = new FakeProcessExecutor(result(0, "codex 2", ""), result(0, "", ""));
 
-        CodexEnvironment environment = checker(executor, Map.of(), "Windows 11").checkReady();
+        CodexEnvironment environment = checker(
+                        executor,
+                        Map.of("PATH", npmDirectory.toString(), "SystemRoot", systemRoot.toString()),
+                        "Windows 11")
+                .checkReady();
 
-        assertEquals(List.of("codex.cmd"), environment.executable().commandPrefix());
+        assertEquals(prefix, environment.executable().commandPrefix());
         assertCommands(executor.specifications(), List.of(
-                List.of("codex", "--version"),
-                List.of("codex.exe", "--version"),
-                List.of("codex.cmd", "--version"),
-                List.of("codex.cmd", "login", "status")));
+                append(prefix, "--version"),
+                append(prefix, "login", "status")));
     }
 
     @Test
@@ -94,22 +111,22 @@ class CodexEnvironmentCheckerTest {
     }
 
     @Test
-    void continuesAfterNonzeroCandidateAndAcceptsNextWindowsCandidate() {
-        FakeProcessExecutor executor = new FakeProcessExecutor(
-                result(17, "", "first failure"), result(0, "codex 2", ""), result(0, "", ""));
+    void mapsANonzeroWindowsNpmShimVersionCheckToExecutionFailure() throws Exception {
+        FakeProcessExecutor executor = new FakeProcessExecutor(result(17, "", "failure"));
 
-        CodexEnvironment environment = checker(executor, Map.of(), "Windows").checkReady();
+        CodexExecutionException exception = assertThrows(
+                CodexExecutionException.class,
+                () -> checker(executor, windowsNpmEnvironment(), "Windows").checkReady());
 
-        assertEquals(List.of("codex.exe"), environment.executable().commandPrefix());
+        assertEquals(17, exception.exitCode());
     }
 
     @Test
-    void reportsExecutionFailureWhenEveryLaunchedCandidateReturnsNonzero() {
-        FakeProcessExecutor executor = new FakeProcessExecutor(
-                result(1, "", "first failure"), result(2, "", "second failure"), result(3, "", "third failure"));
+    void reportsExecutionFailureWhenTheOnlyNonWindowsCandidateReturnsNonzero() {
+        FakeProcessExecutor executor = new FakeProcessExecutor(result(3, "", "failure"));
 
         CodexExecutionException exception = assertThrows(
-                CodexExecutionException.class, () -> checker(executor, Map.of(), "Windows").checkReady());
+                CodexExecutionException.class, () -> checker(executor, Map.of(), "Linux").checkReady());
 
         assertEquals(3, exception.exitCode());
     }
@@ -181,12 +198,27 @@ class CodexEnvironmentCheckerTest {
         assertTrue(exception.getCause() instanceof IllegalStateException);
     }
 
+    @Test
+    void mapsAnInterruptedExecutorToTheTypedInterruptedFailure() {
+        ProcessExecutor executor = specification -> {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted");
+        };
+
+        try {
+            assertThrows(CodexInterruptedException.class, () -> checker(executor, Map.of(), "Linux").checkReady());
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
     private CodexEnvironment successfulEnvironment(String stdout, String stderr) {
         return checker(new FakeProcessExecutor(result(0, stdout, stderr), result(0, "", "")), Map.of(), "Linux")
                 .checkReady();
     }
 
-    private CodexEnvironmentChecker checker(FakeProcessExecutor executor, Map<String, String> environment, String operatingSystem) {
+    private CodexEnvironmentChecker checker(ProcessExecutor executor, Map<String, String> environment, String operatingSystem) {
         return new CodexEnvironmentChecker(
                 executor,
                 CodexRuntimeConfig.defaults(),
@@ -203,6 +235,12 @@ class CodexEnvironmentCheckerTest {
         return environment;
     }
 
+    private Map<String, String> windowsNpmEnvironment() throws Exception {
+        Path npmDirectory = Files.createDirectories(temporaryDirectory.resolve("npm"));
+        Files.writeString(npmDirectory.resolve("codex.ps1"), "powershell shim");
+        return Map.of("PATH", npmDirectory.toString(), "SystemRoot", temporaryDirectory.resolve("Windows").toString());
+    }
+
     private static ProcessResult result(int exitCode, String stdout, String stderr) {
         return new ProcessResult(exitCode, stdout, stderr, false, false, false, Duration.ZERO);
     }
@@ -217,6 +255,12 @@ class CodexEnvironmentCheckerTest {
 
     private static void assertCommands(List<ProcessSpec> specifications, List<List<String>> expectedCommands) {
         assertEquals(expectedCommands, specifications.stream().map(ProcessSpec::command).toList());
+    }
+
+    private static List<String> append(List<String> prefix, String... arguments) {
+        List<String> command = new ArrayList<>(prefix);
+        command.addAll(List.of(arguments));
+        return List.copyOf(command);
     }
 
     private static final class FakeProcessExecutor implements ProcessExecutor {

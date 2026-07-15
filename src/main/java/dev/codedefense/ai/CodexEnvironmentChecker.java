@@ -1,6 +1,7 @@
 package dev.codedefense.ai;
 
 import dev.codedefense.ai.exception.CodexExecutionException;
+import dev.codedefense.ai.exception.CodexInterruptedException;
 import dev.codedefense.ai.exception.CodexNotAuthenticatedException;
 import dev.codedefense.ai.exception.CodexNotInstalledException;
 import dev.codedefense.ai.exception.CodexTimeoutException;
@@ -8,7 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -22,7 +22,7 @@ public final class CodexEnvironmentChecker implements CodexPreflight {
     private final CodexRuntimeConfig config;
     private final Map<String, String> environment;
     private final Path workingDirectory;
-    private final List<CodexExecutable> candidates;
+    private final CodexExecutableResolver executableResolver;
 
     public CodexEnvironmentChecker(
             ProcessExecutor processExecutor,
@@ -37,7 +37,7 @@ public final class CodexEnvironmentChecker implements CodexPreflight {
                 processEnvironment,
                 sourceEnvironment,
                 workingDirectory,
-                candidatesFor(operatingSystem));
+                new CodexExecutableResolver(operatingSystem, sourceEnvironment));
     }
 
     private CodexEnvironmentChecker(
@@ -46,13 +46,13 @@ public final class CodexEnvironmentChecker implements CodexPreflight {
             CodexProcessEnvironment processEnvironment,
             Map<String, String> sourceEnvironment,
             Path workingDirectory,
-            List<CodexExecutable> candidates) {
+            CodexExecutableResolver executableResolver) {
         this.processExecutor = Objects.requireNonNull(processExecutor, "Process executor");
         this.config = Objects.requireNonNull(config, "Codex runtime configuration");
         this.environment = Objects.requireNonNull(processEnvironment, "Codex process environment")
                 .sanitize(sourceEnvironment);
         this.workingDirectory = requireExistingDirectory(workingDirectory);
-        this.candidates = List.copyOf(candidates);
+        this.executableResolver = Objects.requireNonNull(executableResolver, "Codex executable resolver");
     }
 
     /**
@@ -76,7 +76,7 @@ public final class CodexEnvironmentChecker implements CodexPreflight {
     public CodexEnvironment checkReady() {
         CodexExecutionException lastExecutionFailure = null;
 
-        for (CodexExecutable candidate : candidates) {
+        for (CodexExecutable candidate : executableResolver.resolveCandidates()) {
             ProcessResult versionResult;
             try {
                 versionResult = processExecutor.execute(specification(candidate.commandPrefix(), List.of("--version")));
@@ -164,7 +164,10 @@ public final class CodexEnvironmentChecker implements CodexPreflight {
         return null;
     }
 
-    private static CodexExecutionException startFailure(RuntimeException exception) {
+    private static RuntimeException startFailure(RuntimeException exception) {
+        if (Thread.currentThread().isInterrupted()) {
+            return new CodexInterruptedException(exception);
+        }
         return new CodexExecutionException(-1, "Codex version check could not start.", exception);
     }
 
@@ -176,14 +179,4 @@ public final class CodexEnvironmentChecker implements CodexPreflight {
         return path;
     }
 
-    private static List<CodexExecutable> candidatesFor(String operatingSystem) {
-        Objects.requireNonNull(operatingSystem, "Operating system");
-        if (operatingSystem.toLowerCase(Locale.ROOT).startsWith("windows")) {
-            return List.of(
-                    new CodexExecutable(List.of("codex")),
-                    new CodexExecutable(List.of("codex.exe")),
-                    new CodexExecutable(List.of("codex.cmd")));
-        }
-        return List.of(new CodexExecutable(List.of("codex")));
-    }
 }

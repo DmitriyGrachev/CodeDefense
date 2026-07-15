@@ -1,28 +1,44 @@
 package dev.codedefense.cli;
 
+import dev.codedefense.ai.CodexEnvironment;
+import dev.codedefense.ai.CodexEnvironmentChecker;
+import dev.codedefense.ai.CodexPreflight;
+import dev.codedefense.ai.CodexProcessEnvironment;
+import dev.codedefense.ai.CodexRuntimeConfig;
+import dev.codedefense.ai.JdkProcessExecutor;
+import dev.codedefense.ai.exception.CodexExecutionException;
+import dev.codedefense.ai.exception.CodexInterruptedException;
+import dev.codedefense.ai.exception.CodexNotAuthenticatedException;
+import dev.codedefense.ai.exception.CodexNotInstalledException;
+import dev.codedefense.ai.exception.CodexTimeoutException;
+import dev.codedefense.application.CodeDefenseConfig;
+import dev.codedefense.domain.EmptyProjectSnapshotException;
 import dev.codedefense.domain.ScanSummary;
 import dev.codedefense.scanner.FileSystemProjectScanner;
 import dev.codedefense.scanner.InvalidProjectPathException;
 import dev.codedefense.scanner.NoSupportedSourceFilesException;
 import dev.codedefense.scanner.ProjectScanner;
-import dev.codedefense.scanner.ScanPolicy;
 import dev.codedefense.scanner.ProjectSnapshotBuilder;
-import dev.codedefense.application.CodeDefenseConfig;
-import dev.codedefense.domain.EmptyProjectSnapshotException;
+import dev.codedefense.scanner.ScanPolicy;
 import dev.codedefense.terminal.ConfirmationPrompt;
 import dev.codedefense.terminal.ConsoleConfirmationPrompt;
 import java.nio.file.Path;
+import java.util.Objects;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Spec;
 
-@Command(name = "start", description = "Start a technical defense for a local repository.")
+@Command(
+        name = "start",
+        mixinStandardHelpOptions = true,
+        description = "Start a technical defense for a local repository.")
 public final class StartCommand implements java.util.concurrent.Callable<Integer> {
     private final ProjectScanner scanner;
     private final ProjectSnapshotBuilder snapshotBuilder;
     private final ConfirmationPrompt confirmation;
+    private final CodexPreflight preflight;
 
     @Parameters(index = "0", arity = "0..1", defaultValue = ".", paramLabel = "PATH", description = "Repository path (default: current directory).")
     private Path path;
@@ -35,14 +51,26 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
     private CommandSpec commandSpec;
 
     public StartCommand() {
-        this(new FileSystemProjectScanner(), new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()), new ConsoleConfirmationPrompt());
+        this(
+                new FileSystemProjectScanner(),
+                new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
+                new ConsoleConfirmationPrompt(),
+                productionPreflight());
     }
 
     StartCommand(ProjectScanner scanner) {
-        this(scanner, new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()), prompt -> false);
+        this(scanner, new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()), prompt -> false, productionPreflight());
     }
-    StartCommand(ProjectScanner scanner, ProjectSnapshotBuilder snapshotBuilder, ConfirmationPrompt confirmation) {
-        this.scanner = scanner; this.snapshotBuilder = snapshotBuilder; this.confirmation = confirmation;
+
+    StartCommand(
+            ProjectScanner scanner,
+            ProjectSnapshotBuilder snapshotBuilder,
+            ConfirmationPrompt confirmation,
+            CodexPreflight preflight) {
+        this.scanner = Objects.requireNonNull(scanner, "Project scanner");
+        this.snapshotBuilder = Objects.requireNonNull(snapshotBuilder, "Project snapshot builder");
+        this.confirmation = Objects.requireNonNull(confirmation, "Confirmation prompt");
+        this.preflight = Objects.requireNonNull(preflight, "Codex preflight");
     }
 
     public Path path() {
@@ -66,7 +94,11 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             String prompt = "Send selected snapshot to Codex? [y/N]";
             if (!yes) commandSpec.commandLine().getOut().println(prompt);
             if (!yes && !confirmation.confirm(prompt)) { commandSpec.commandLine().getOut().println("Cancelled before any source content was sent."); return ExitCodes.SUCCESS; }
-            commandSpec.commandLine().getOut().println("Codex execution arrives in Iteration 4.");
+            CodexEnvironment environment = preflight.checkReady();
+            commandSpec.commandLine().getOut().printf(
+                    "Codex CLI is installed and authenticated.%nVersion: %s%n"
+                            + "Project analysis will be connected in Iteration 5.%n",
+                    environment.version());
             return ExitCodes.SUCCESS;
         } catch (InvalidProjectPathException exception) {
             commandSpec.commandLine().getErr().println(exception.getMessage());
@@ -77,6 +109,27 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
         } catch (EmptyProjectSnapshotException exception) {
             commandSpec.commandLine().getErr().println(exception.getMessage());
             return ExitCodes.NO_SUPPORTED_SOURCE_FILES;
+        } catch (CodexNotInstalledException exception) {
+            commandSpec.commandLine().getErr().println(exception.getMessage());
+            return ExitCodes.CODEX_NOT_INSTALLED;
+        } catch (CodexNotAuthenticatedException exception) {
+            commandSpec.commandLine().getErr().println(exception.getMessage());
+            return ExitCodes.CODEX_NOT_AUTHENTICATED;
+        } catch (CodexTimeoutException | CodexExecutionException exception) {
+            commandSpec.commandLine().getErr().println(exception.getMessage());
+            return ExitCodes.CODEX_EXECUTION_FAILED;
+        } catch (CodexInterruptedException exception) {
+            Thread.currentThread().interrupt();
+            commandSpec.commandLine().getErr().println(exception.getMessage());
+            return ExitCodes.CANCELLED;
         }
+    }
+
+    private static CodexPreflight productionPreflight() {
+        return CodexEnvironmentChecker.forCurrentEnvironment(
+                new JdkProcessExecutor(),
+                CodexRuntimeConfig.defaults(),
+                new CodexProcessEnvironment(),
+                Path.of(".").toAbsolutePath().normalize());
     }
 }

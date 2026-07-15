@@ -1,6 +1,8 @@
 package dev.codedefense.cli;
 
 import dev.codedefense.application.CodeDefenseConfig;
+import dev.codedefense.ai.CodexEnvironment;
+import dev.codedefense.ai.CodexExecutable;
 import dev.codedefense.domain.ScanSummary;
 import dev.codedefense.domain.SourceFile;
 import dev.codedefense.scanner.ProjectScanner;
@@ -60,7 +62,11 @@ class StartCommandSnapshotTest {
     }
 
     private CommandLine commandLine(ProjectScanner scanner, ConfirmationPrompt confirmation, ByteArrayOutputStream output) {
-        var commandLine = new CommandLine(new StartCommand(scanner, new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()), confirmation));
+        var commandLine = new CommandLine(new StartCommand(
+                scanner,
+                new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
+                confirmation,
+                () -> new CodexEnvironment(new CodexExecutable(List.of("codex")), "test")));
         commandLine.setOut(new PrintWriter(output, true, StandardCharsets.UTF_8));
         return commandLine;
     }

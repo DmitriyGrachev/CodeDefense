@@ -1,7 +1,11 @@
 package dev.codedefense;
 
 import dev.codedefense.cli.ExitCodes;
+import dev.codedefense.cli.ReportCommand;
 import dev.codedefense.cli.RootCommand;
+import dev.codedefense.cli.SampleCommand;
+import dev.codedefense.cli.StartCommand;
+import java.util.Objects;
 import picocli.CommandLine;
 
 public final class CodeDefenseApplication {
@@ -13,7 +17,16 @@ public final class CodeDefenseApplication {
     }
 
     public static CommandLine createCommandLine() {
+        return createCommandLine(new StartCommand());
+    }
+
+    /** Creates the CLI object graph with an explicitly supplied start command. */
+    public static CommandLine createCommandLine(StartCommand startCommand) {
+        Objects.requireNonNull(startCommand, "Start command");
         CommandLine commandLine = new CommandLine(new RootCommand());
+        commandLine.addSubcommand("start", startCommand);
+        commandLine.addSubcommand("sample", new SampleCommand());
+        commandLine.addSubcommand("report", new ReportCommand());
         commandLine.setParameterExceptionHandler((exception, arguments) -> {
             exception.getCommandLine().getErr().println(exception.getMessage());
             exception.getCommandLine().getErr().println("Try 'codedefense --help' for more information.");

@@ -30,14 +30,14 @@ class CodexProcessRunnerTest {
         AtomicBoolean schemaPresent = new AtomicBoolean();
         FakeProcessExecutor executor = new FakeProcessExecutor(specification -> {
             schemaPresent.set(Files.exists(pathAfter(specification.command(), "--output-schema")));
-            writeOutput(specification, "{\"status\":\"ok\"}");
+            writeOutput(specification, "{\"status\":\"ok\"}\r\n \t");
             return result(0, "", "", false);
         });
         StructuredCodexRequest request = request("private prompt", "{\"type\":\"object\"}");
 
         StructuredCodexResult result = runner(executor).execute(environment(), request);
 
-        assertEquals("{\"status\":\"ok\"}", result.finalJson());
+        assertEquals("{\"status\":\"ok\"}\r\n \t", result.finalJson());
         assertEquals(request.model(), result.model());
         assertEquals(request.prompt(), executor.specification.standardInput());
         assertTrue(schemaPresent.get());
@@ -76,6 +76,40 @@ class CodexProcessRunnerTest {
     }
 
     @Test
+    void removesPromptSchemaWorkspacePathsAndTerminalControlsFromStderr() {
+        StructuredCodexRequest request = request("PRIVATE PROMPT", "{\"private\":\"SCHEMA\"}");
+        FakeProcessExecutor executor = new FakeProcessExecutor(specification -> {
+            Path workspace = specification.workingDirectory();
+            Path schema = pathAfter(specification.command(), "--output-schema");
+            Path output = pathAfter(specification.command(), "--output-last-message");
+            String stderr = "prompt=" + request.prompt()
+                    + " schema=" + request.schemaJson()
+                    + " workspace=" + workspace
+                    + " schemaPath=" + schema
+                    + " outputPath=" + output
+                    + "\u001B[31m terminal\u0007";
+            return result(9, "", stderr, false);
+        });
+
+        CodexExecutionException exception = assertThrows(
+                CodexExecutionException.class, () -> runner(executor).execute(environment(), request));
+
+        String message = exception.getMessage();
+        assertFalse(message.contains(request.prompt()));
+        assertFalse(message.contains(request.schemaJson()));
+        assertFalse(message.contains(executor.workspace.toString()));
+        assertFalse(message.contains(executor.workspace.resolve("schema.json").toString()));
+        assertFalse(message.contains(executor.workspace.resolve("final-message.json").toString()));
+        assertFalse(message.contains("\u001B"));
+        assertFalse(message.contains("\u0007"));
+        assertTrue(message.contains("[PROMPT REDACTED]"));
+        assertTrue(message.contains("[SCHEMA REDACTED]"));
+        assertTrue(message.contains("[TEMP WORKSPACE]"));
+        assertTrue(message.contains("[SCHEMA PATH]"));
+        assertTrue(message.contains("[OUTPUT PATH]"));
+    }
+
+    @Test
     void rejectsMissingEmptyMalformedScalarAndOversizedOutputAndCleansWorkspace() {
         assertInvalidOutput(specification -> result(0, "", "", false));
         assertInvalidOutput(specification -> {
@@ -95,7 +129,23 @@ class CodexProcessRunnerTest {
             return result(0, "", "", false);
         });
         assertInvalidOutput(specification -> {
+            writeOutput(specification, "null");
+            return result(0, "", "", false);
+        });
+        assertInvalidOutput(specification -> {
+            writeOutput(specification, "{\"ok\":true} {\"second\":true}");
+            return result(0, "", "", false);
+        });
+        assertInvalidOutput(specification -> {
+            writeOutput(specification, "{\"ok\":true} trailing");
+            return result(0, "", "", false);
+        });
+        assertInvalidOutput(specification -> {
             writeOutput(specification, " ".repeat(1024 * 1024 + 1));
+            return result(0, "", "", false);
+        });
+        assertInvalidOutput(specification -> {
+            writeOutputBytes(specification, new byte[] {'{', '"', 'x', '"', ':', '"', (byte) 0xC3, 0x28, '"', '}'});
             return result(0, "", "", false);
         });
     }
@@ -116,6 +166,18 @@ class CodexProcessRunnerTest {
                 InvalidCodexResponseException.class,
                 () -> runner(new FakeProcessExecutor(specification -> result(0, "", "", false)))
                         .execute(environment(), request(secretPrompt, "[]")));
+        assertThrows(
+                InvalidCodexResponseException.class,
+                () -> runner(new FakeProcessExecutor(specification -> result(0, "", "", false)))
+                        .execute(environment(), request(secretPrompt, "null")));
+        assertThrows(
+                InvalidCodexResponseException.class,
+                () -> runner(new FakeProcessExecutor(specification -> result(0, "", "", false)))
+                        .execute(environment(), request(secretPrompt, "{} {}")));
+        assertThrows(
+                InvalidCodexResponseException.class,
+                () -> runner(new FakeProcessExecutor(specification -> result(0, "", "", false)))
+                        .execute(environment(), request(secretPrompt, "{} trailing")));
 
         InvalidCodexResponseException promptException = assertThrows(
                 InvalidCodexResponseException.class,
@@ -131,6 +193,31 @@ class CodexProcessRunnerTest {
         assertFalse(Files.exists(temporaryParent.resolve("codedefense-codex-")));
     }
 
+    @Test
+    void mapsWorkspaceCreationAndSchemaWriteFailuresToExecutionFailures() {
+        CodexExecutionException creationFailure = assertThrows(
+                CodexExecutionException.class,
+                () -> runner(
+                        new FakeProcessExecutor(specification -> result(0, "", "", false)),
+                        () -> {
+                            throw new IOException("workspace failure");
+                        }).execute(environment(), request("private prompt", "{}")));
+        assertFalse(creationFailure.getMessage().contains("private prompt"));
+
+        CodexExecutionException schemaFailure = assertThrows(
+                CodexExecutionException.class,
+                () -> runner(
+                        new FakeProcessExecutor(specification -> result(0, "", "", false)),
+                        () -> CodexTemporaryWorkspace.create(
+                                temporaryParent,
+                                CodexTemporaryWorkspace::deleteWorkspace,
+                                (path, schema) -> {
+                                    throw new IOException("schema failure");
+                                })).execute(environment(), request("private prompt", "{}")));
+        assertFalse(schemaFailure.getMessage().contains("private prompt"));
+        assertParentIsEmpty();
+    }
+
     private void assertInvalidOutput(Function<ProcessSpec, ProcessResult> action) {
         FakeProcessExecutor executor = new FakeProcessExecutor(action);
         InvalidCodexResponseException exception = assertThrows(
@@ -140,13 +227,17 @@ class CodexProcessRunnerTest {
     }
 
     private CodexProcessRunner runner(ProcessExecutor executor) {
+        return runner(executor, () -> CodexTemporaryWorkspace.create(temporaryParent));
+    }
+
+    private CodexProcessRunner runner(ProcessExecutor executor, CodexTemporaryWorkspace.Factory workspaceFactory) {
         return new CodexProcessRunner(
                 executor,
                 new CodexCommandFactory(),
                 new CodexProcessEnvironment(),
                 CodexRuntimeConfig.defaults(),
                 new ObjectMapper(),
-                () -> CodexTemporaryWorkspace.create(temporaryParent),
+                workspaceFactory,
                 Map.of("OPENAI_API_KEY", "secret", "ORDINARY", "kept"));
     }
 
@@ -170,6 +261,14 @@ class CodexProcessRunnerTest {
     private static void writeOutput(ProcessSpec specification, String output) {
         try {
             Files.writeString(pathAfter(specification.command(), "--output-last-message"), output);
+        } catch (IOException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    private static void writeOutputBytes(ProcessSpec specification, byte[] output) {
+        try {
+            Files.write(pathAfter(specification.command(), "--output-last-message"), output);
         } catch (IOException exception) {
             throw new AssertionError(exception);
         }

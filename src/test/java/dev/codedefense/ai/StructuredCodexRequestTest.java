@@ -41,6 +41,30 @@ class StructuredCodexRequestTest {
     }
 
     @Test
+    void acceptsSafeOperationIdentifiers() {
+        assertEquals("project-analysis", request(
+                "project-analysis", "prompt", "{}", "model", ReasoningEffort.LOW,
+                Duration.ofSeconds(1)).operationName());
+        assertEquals("live.smoke", request(
+                "live.smoke", "prompt", "{}", "model", ReasoningEffort.LOW,
+                Duration.ofSeconds(1)).operationName());
+    }
+
+    @Test
+    void rejectsUnsafeOperationIdentifiers() {
+        assertThrows(IllegalArgumentException.class, () -> request(
+                "project analysis", "prompt", "{}", "model", ReasoningEffort.LOW,
+                Duration.ofSeconds(1)));
+        assertThrows(IllegalArgumentException.class, () -> request(
+                "project-analysis\nprivate-source", "prompt", "{}", "model", ReasoningEffort.LOW,
+                Duration.ofSeconds(1)));
+        assertThrows(IllegalArgumentException.class, () -> request(
+                "../secret", "prompt", "{}", "model", ReasoningEffort.LOW, Duration.ofSeconds(1)));
+        assertThrows(IllegalArgumentException.class, () -> request(
+                "a".repeat(65), "prompt", "{}", "model", ReasoningEffort.LOW, Duration.ofSeconds(1)));
+    }
+
+    @Test
     void rejectsInvalidRequestFields() {
         assertThrows(IllegalArgumentException.class, () -> request(" ", "prompt", "{}", "model", ReasoningEffort.LOW, Duration.ofSeconds(1)));
         assertThrows(IllegalArgumentException.class, () -> request("operation", " ", "{}", "model", ReasoningEffort.LOW, Duration.ofSeconds(1)));

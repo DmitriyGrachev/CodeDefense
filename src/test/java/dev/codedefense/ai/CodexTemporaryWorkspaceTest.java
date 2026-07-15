@@ -70,12 +70,27 @@ class CodexTemporaryWorkspaceTest {
             // Symbolic links require platform permission.
         }
 
-        assertThrows(IllegalStateException.class, workspace::close);
-        assertTrue(Files.exists(workspace.workspace()));
         workspace.close();
 
         assertEquals(2, attempts.get());
         assertFalse(Files.exists(workspace.workspace()));
         assertEquals("outside", Files.readString(outside));
+    }
+
+    @Test
+    void retainsBothFailuresWhenCleanupCannotBeRetriedSuccessfully() throws Exception {
+        AtomicInteger attempts = new AtomicInteger();
+        CodexTemporaryWorkspace workspace = CodexTemporaryWorkspace.create(
+                temporaryParent,
+                path -> {
+                    attempts.incrementAndGet();
+                    throw new java.io.IOException("deletion failure");
+                });
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, workspace::close);
+
+        assertEquals(2, attempts.get());
+        assertEquals(1, exception.getCause().getSuppressed().length);
+        assertTrue(Files.exists(workspace.workspace()));
     }
 }

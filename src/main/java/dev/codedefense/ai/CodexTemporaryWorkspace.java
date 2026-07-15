@@ -82,11 +82,20 @@ public final class CodexTemporaryWorkspace implements AutoCloseable {
             closed = true;
             return;
         }
+        IOException firstFailure;
         try {
             deleter.delete(workspace);
             closed = true;
+            return;
         } catch (IOException exception) {
-            throw new IllegalStateException("Unable to clean temporary Codex workspace.", exception);
+            firstFailure = exception;
+        }
+        try {
+            deleter.delete(workspace);
+            closed = true;
+        } catch (IOException secondFailure) {
+            firstFailure.addSuppressed(secondFailure);
+            throw new IllegalStateException("Unable to clean temporary Codex workspace.", firstFailure);
         }
     }
 

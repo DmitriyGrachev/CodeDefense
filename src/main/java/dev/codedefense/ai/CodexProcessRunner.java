@@ -17,20 +17,17 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.regex.Pattern;
 
 /** Executes one schema-constrained Codex request inside an empty temporary workspace. */
 public final class CodexProcessRunner {
     private static final int MAXIMUM_SCHEMA_BYTES = 256 * 1024;
     private static final int MAXIMUM_PROMPT_BYTES = 512 * 1024;
     private static final int BUFFER_SIZE = 8 * 1024;
-    private static final Pattern ANSI_SEQUENCE = Pattern.compile(
-            "\\u001B(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\u0007]*(?:\\u0007|\\u001B\\\\\\\\))");
-
     private final ProcessExecutor processExecutor;
     private final CodexCommandFactory commandFactory;
     private final CodexRuntimeConfig config;
@@ -75,7 +72,7 @@ public final class CodexProcessRunner {
             }
             if (processResult.exitCode() != 0) {
                 throw new CodexExecutionException(
-                        processResult.exitCode(), safeDiagnostic(processResult, request, workspace));
+                        processResult.exitCode(), safeExecutionDiagnostic(processResult));
             }
 
             String finalJson = readFinalJson(workspace.finalMessagePath());
@@ -129,7 +126,7 @@ public final class CodexProcessRunner {
 
     private String readFinalJson(Path outputPath) {
         try {
-            if (!Files.isRegularFile(outputPath)) {
+            if (!Files.isRegularFile(outputPath, LinkOption.NOFOLLOW_LINKS)) {
                 throw new InvalidCodexResponseException("Codex did not produce a final response.");
             }
             byte[] bytes = readBounded(outputPath, config.maximumFinalResponseBytes());
@@ -144,7 +141,7 @@ public final class CodexProcessRunner {
     }
 
     private static byte[] readBounded(Path path, int limit) throws IOException {
-        try (InputStream input = Files.newInputStream(path);
+        try (InputStream input = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS);
                 ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(limit, BUFFER_SIZE))) {
             byte[] buffer = new byte[BUFFER_SIZE];
             int total = 0;
@@ -188,62 +185,15 @@ public final class CodexProcessRunner {
         }
     }
 
-    private String safeDiagnostic(
-            ProcessResult result, StructuredCodexRequest request, CodexTemporaryWorkspace workspace) {
-        String diagnostic = result.stderr()
-                .replace(request.prompt(), "[PROMPT REDACTED]")
-                .replace(request.schemaJson(), "[SCHEMA REDACTED]")
-                .replace(workspace.finalMessagePath().toString(), "[OUTPUT PATH]")
-                .replace(workspace.schemaPath().toString(), "[SCHEMA PATH]")
-                .replace(workspace.workspace().toString(), "[TEMP WORKSPACE]")
-                .replace("\r\n", "\n")
-                .replace('\r', '\n');
-        diagnostic = ANSI_SEQUENCE.matcher(diagnostic).replaceAll("");
-        diagnostic = stripControls(diagnostic);
-        return boundedDiagnostic(diagnostic, result.stderrTruncated());
-    }
-
-    private String boundedDiagnostic(String diagnostic, boolean alreadyTruncated) {
-        int limit = config.maximumCapturedStderrBytes();
-        boolean truncated = alreadyTruncated || utf8Bytes(diagnostic) > limit;
-        if (!truncated) {
-            return diagnostic;
+    private static String safeExecutionDiagnostic(ProcessResult result) {
+        if (result.stderrTruncated()) {
+            return "Codex CLI failed. Captured diagnostics were omitted and had been truncated.";
         }
-        String marker = utf8Prefix("\n[stderr truncated]", limit);
-        int contentLimit = Math.max(0, limit - utf8Bytes(marker));
-        return utf8Prefix(diagnostic, contentLimit) + marker;
-    }
-
-    private static String stripControls(String value) {
-        StringBuilder sanitized = new StringBuilder(value.length());
-        for (int offset = 0; offset < value.length();) {
-            int codePoint = value.codePointAt(offset);
-            if (codePoint == '\n' || codePoint == '\t' || !Character.isISOControl(codePoint)) {
-                sanitized.appendCodePoint(codePoint);
-            }
-            offset += Character.charCount(codePoint);
-        }
-        return sanitized.toString();
+        return "Codex CLI failed. Captured diagnostics were omitted to protect repository content.";
     }
 
     private static int utf8Bytes(String value) {
         return value.getBytes(StandardCharsets.UTF_8).length;
     }
 
-    private static String utf8Prefix(String value, int limit) {
-        StringBuilder prefix = new StringBuilder();
-        int bytes = 0;
-        for (int offset = 0; offset < value.length();) {
-            int codePoint = value.codePointAt(offset);
-            String character = new String(Character.toChars(codePoint));
-            int characterBytes = utf8Bytes(character);
-            if (bytes + characterBytes > limit) {
-                break;
-            }
-            prefix.append(character);
-            bytes += characterBytes;
-            offset += Character.charCount(codePoint);
-        }
-        return prefix.toString();
-    }
 }

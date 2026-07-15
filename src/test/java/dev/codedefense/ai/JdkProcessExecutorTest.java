@@ -58,6 +58,23 @@ class JdkProcessExecutorTest {
     }
 
     @Test
+    void preservesNonzeroExitWhenChildStopsReadingLargeStdin() {
+        ProcessResult result = new JdkProcessExecutor().execute(spec(
+                "fail",
+                "x".repeat(10 * 1024 * 1024),
+                1024,
+                1024,
+                Duration.ofSeconds(2),
+                Map.of(),
+                "17",
+                "early failure"));
+
+        assertEquals(17, result.exitCode());
+        assertEquals("early failure", result.stderr());
+        assertFalse(result.timedOut());
+    }
+
+    @Test
     void marksStdoutAsTruncatedWhenItsCaptureLimitIsExceeded() {
         ProcessResult result = new JdkProcessExecutor().execute(
                 spec("echo", "12345", 3, 1024, Duration.ofSeconds(2), Map.of()));

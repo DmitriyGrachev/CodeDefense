@@ -6,7 +6,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
@@ -21,8 +20,8 @@ public final class JdkProcessExecutor implements ProcessExecutor {
     @Override
     public ProcessResult execute(ProcessSpec spec) {
         Objects.requireNonNull(spec, "Process specification");
-        Instant startedAt = Instant.now();
-        long deadlineNanos = System.nanoTime() + spec.timeout().toNanos();
+        long startedNanos = System.nanoTime();
+        long deadlineNanos = startedNanos + spec.timeout().toNanos();
         Process process = start(spec);
         BoundedCapture stdout = new BoundedCapture(spec.maximumStdoutBytes());
         BoundedCapture stderr = new BoundedCapture(spec.maximumStderrBytes());
@@ -44,14 +43,16 @@ public final class JdkProcessExecutor implements ProcessExecutor {
                     || !awaitUntil(stderrTask.future(), deadlineNanos, "capture standard error");
             if (timedOut) {
                 abort(process, spec.terminationGracePeriod(), inputTask, stdoutTask, stderrTask);
-                return result(process, stdout, stderr, true, startedAt);
+                return result(exitCode(process), stdout, stderr, true, startedNanos);
             }
 
+            int exitCode = process.exitValue();
+            ProcessResult processResult = result(exitCode, stdout, stderr, false, startedNanos);
             InputWriteResult inputWriteResult = inputTask.future().getNow(null);
-            if (inputWriteResult.failure() != null) {
+            if (inputWriteResult.failure() != null && exitCode == 0) {
                 throw new IllegalStateException("Unable to write standard input", inputWriteResult.failure());
             }
-            return result(process, stdout, stderr, false, startedAt);
+            return processResult;
         } catch (InterruptedException exception) {
             abortAfterInterrupt(process, spec.terminationGracePeriod(), inputTask, stdoutTask, stderrTask);
             Thread.currentThread().interrupt();
@@ -179,17 +180,21 @@ public final class JdkProcessExecutor implements ProcessExecutor {
     }
 
     private static ProcessResult result(
-            Process process, BoundedCapture stdout, BoundedCapture stderr, boolean timedOut, Instant startedAt) {
+            int exitCode, BoundedCapture stdout, BoundedCapture stderr, boolean timedOut, long startedNanos) {
         CapturedOutput capturedStdout = stdout.snapshot();
         CapturedOutput capturedStderr = stderr.snapshot();
         return new ProcessResult(
-                process.isAlive() ? -1 : process.exitValue(),
+                exitCode,
                 capturedStdout.text(),
                 capturedStderr.text(),
                 capturedStdout.truncated(),
                 capturedStderr.truncated(),
                 timedOut,
-                Duration.between(startedAt, Instant.now()));
+                Duration.ofNanos(System.nanoTime() - startedNanos));
+    }
+
+    private static int exitCode(Process process) {
+        return process.isAlive() ? -1 : process.exitValue();
     }
 
     private static long remainingNanos(long deadlineNanos) {

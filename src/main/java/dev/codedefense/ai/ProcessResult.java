@@ -9,6 +9,7 @@ public record ProcessResult(
         String stderr,
         boolean stdoutTruncated,
         boolean stderrTruncated,
+        boolean timedOut,
         Duration duration) {
 
     public ProcessResult {
@@ -22,7 +23,7 @@ public record ProcessResult(
 
     @Override
     public String toString() {
-        return "ProcessResult[exitCode=%s, stdoutTruncated=%s, stderrTruncated=%s, duration=%s]"
-                .formatted(exitCode, stdoutTruncated, stderrTruncated, duration);
+        return "ProcessResult[exitCode=%s, stdoutTruncated=%s, stderrTruncated=%s, timedOut=%s, duration=%s]"
+                .formatted(exitCode, stdoutTruncated, stderrTruncated, timedOut, duration);
     }
 }

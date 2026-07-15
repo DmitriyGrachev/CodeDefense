@@ -25,6 +25,7 @@ class JdkProcessExecutorTest {
         assertEquals(0, result.exitCode());
         assertEquals("Hello, Привет 👋", result.stdout());
         assertEquals("", result.stderr());
+        assertFalse(result.timedOut());
     }
 
     @Test
@@ -35,6 +36,7 @@ class JdkProcessExecutorTest {
         assertEquals(0, result.exitCode());
         assertEquals("stdout value", result.stdout());
         assertEquals("stderr value", result.stderr());
+        assertFalse(result.timedOut());
     }
 
     @Test
@@ -44,6 +46,15 @@ class JdkProcessExecutorTest {
 
         assertEquals(17, result.exitCode());
         assertEquals("diagnostic with spaces", result.stderr());
+        assertFalse(result.timedOut());
+    }
+
+    @Test
+    void preservesIntentionalExitCodeWithoutTimeout() {
+        ProcessResult result = new JdkProcessExecutor().execute(spec("fail", "", "143", "intentional"));
+
+        assertEquals(143, result.exitCode());
+        assertFalse(result.timedOut());
     }
 
     @Test
@@ -54,6 +65,7 @@ class JdkProcessExecutorTest {
         assertEquals("123", result.stdout());
         assertTrue(result.stdoutTruncated());
         assertFalse(result.stderrTruncated());
+        assertFalse(result.timedOut());
     }
 
     @Test
@@ -64,6 +76,7 @@ class JdkProcessExecutorTest {
         assertEquals("eee", result.stderr());
         assertFalse(result.stdoutTruncated());
         assertTrue(result.stderrTruncated());
+        assertFalse(result.timedOut());
     }
 
     @Test
@@ -74,15 +87,43 @@ class JdkProcessExecutorTest {
         assertEquals(0, result.exitCode());
         assertEquals(128, result.stderr().length());
         assertTrue(result.stderrTruncated());
+        assertFalse(result.timedOut());
     }
 
     @Test
-    void terminatesAProcessThatExceedsItsTimeout() {
+    void marksKilledProcessAsTimedOut() {
         ProcessResult result = new JdkProcessExecutor().execute(
                 spec("sleep", "", 1024, 1024, Duration.ofMillis(250), Map.of(), "5000"));
 
+        assertTrue(result.timedOut());
         assertTrue(result.duration().compareTo(Duration.ofMillis(200)) >= 0);
         assertTrue(result.duration().compareTo(Duration.ofSeconds(2)) < 0);
+    }
+
+    @Test
+    void blockedStdinWriterDoesNotMaskTimeout() {
+        ProcessResult result = new JdkProcessExecutor().execute(spec(
+                "sleep-without-reading-stdin",
+                "x".repeat(1024 * 1024),
+                1024,
+                1024,
+                Duration.ofMillis(250),
+                Map.of(),
+                "5000"));
+
+        assertTrue(result.timedOut());
+        assertTrue(result.duration().compareTo(Duration.ofSeconds(2)) < 0);
+    }
+
+    @Test
+    void descendantCannotKeepExecutionOpenPastDeadline() {
+        long started = System.nanoTime();
+        ProcessResult result = new JdkProcessExecutor().execute(spec(
+                "spawn-descendant", "", 1024, 1024, Duration.ofMillis(250), Map.of(), "5000"));
+        Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+
+        assertTrue(result.timedOut());
+        assertTrue(elapsed.compareTo(Duration.ofSeconds(2)) < 0);
     }
 
     @Test

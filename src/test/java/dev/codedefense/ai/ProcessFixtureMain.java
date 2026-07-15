@@ -2,7 +2,10 @@ package dev.codedefense.ai;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public final class ProcessFixtureMain {
     private ProcessFixtureMain() {
@@ -38,6 +41,14 @@ public final class ProcessFixtureMain {
                 requireArgumentCount(arguments, 2);
                 sleep(Long.parseLong(arguments[1]));
             }
+            case "sleep-without-reading-stdin" -> {
+                requireArgumentCount(arguments, 2);
+                sleep(Long.parseLong(arguments[1]));
+            }
+            case "spawn-descendant" -> {
+                requireArgumentCount(arguments, 2);
+                spawnDescendant(Long.parseLong(arguments[1]));
+            }
             default -> throw new IllegalArgumentException("Unsupported fixture mode");
         }
     }
@@ -69,5 +80,24 @@ public final class ProcessFixtureMain {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private static void spawnDescendant(long milliseconds) throws IOException {
+        List<String> command = new ArrayList<>();
+        command.add(javaExecutable().toString());
+        command.add("-cp");
+        command.add(System.getProperty("java.class.path"));
+        command.add(ProcessFixtureMain.class.getName());
+        command.add("sleep");
+        command.add(Long.toString(milliseconds));
+        new ProcessBuilder(command)
+                .directory(Path.of(System.getProperty("java.io.tmpdir")).toFile())
+                .inheritIO()
+                .start();
+    }
+
+    private static Path javaExecutable() {
+        boolean windows = System.getProperty("os.name").toLowerCase().contains("win");
+        return Path.of(System.getProperty("java.home"), "bin", windows ? "java.exe" : "java");
     }
 }

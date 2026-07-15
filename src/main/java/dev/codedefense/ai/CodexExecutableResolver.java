@@ -1,15 +1,19 @@
 package dev.codedefense.ai;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /** Resolves a safe command prefix for a locally installed Codex CLI. */
 public final class CodexExecutableResolver {
@@ -27,35 +31,38 @@ public final class CodexExecutableResolver {
     /**
      * Resolves command prefixes in deterministic preference order.
      *
-     * <p>Windows npm installs contain an extensionless Unix shim and a {@code .cmd} shim in addition to
-     * {@code codex.ps1}. CodeDefense deliberately invokes only the PowerShell shim through {@code -File}.
+     * <p>On Windows, native {@code codex.exe} launchers are preferred. npm installations are supported through
+     * {@code codex.ps1} launched by Windows PowerShell with {@code -File}; the {@code .cmd} and extensionless
+     * npm shims are deliberately never invoked.
      */
     public List<CodexExecutable> resolveCandidates() {
         if (!isWindows()) {
             return List.of(new CodexExecutable(List.of("codex")));
         }
 
-        Optional<Path> systemRoot = environmentValue("SystemRoot").flatMap(CodexExecutableResolver::path);
-        if (systemRoot.isEmpty()) {
-            return List.of();
+        List<Path> entries = pathEntries();
+        Set<CodexExecutable> candidates = new LinkedHashSet<>();
+
+        for (Path pathEntry : entries) {
+            Path nativeExecutable = pathEntry.resolve("codex.exe");
+            if (Files.isRegularFile(nativeExecutable, LinkOption.NOFOLLOW_LINKS)) {
+                candidates.add(new CodexExecutable(List.of(normalizedAbsolute(nativeExecutable).toString())));
+            }
         }
 
-        Path powerShell = systemRoot.get()
-                .resolve("System32")
-                .resolve("WindowsPowerShell")
-                .resolve("v1.0")
-                .resolve("powershell.exe");
-        List<CodexExecutable> candidates = new ArrayList<>();
-        for (Path pathEntry : pathEntries()) {
-            Path powerShellShim = pathEntry.resolve("codex.ps1");
-            if (Files.isRegularFile(powerShellShim, LinkOption.NOFOLLOW_LINKS)) {
+        powerShellExecutable().ifPresent(powerShell -> {
+            for (Path pathEntry : entries) {
+                Path powerShellShim = pathEntry.resolve("codex.ps1");
+                if (!Files.isRegularFile(powerShellShim, LinkOption.NOFOLLOW_LINKS)) {
+                    continue;
+                }
                 List<String> prefix = new ArrayList<>();
                 prefix.add(powerShell.toString());
                 prefix.addAll(POWERSHELL_ARGUMENTS);
-                prefix.add(powerShellShim.toAbsolutePath().normalize().toString());
+                prefix.add(normalizedAbsolute(powerShellShim).toString());
                 candidates.add(new CodexExecutable(prefix));
             }
-        }
+        });
         return List.copyOf(candidates);
     }
 
@@ -70,12 +77,22 @@ public final class CodexExecutableResolver {
         }
 
         List<Path> entries = new ArrayList<>();
-        for (String value : pathValue.get().split(";", -1)) {
-            if (!value.isBlank()) {
-                path(value).ifPresent(entries::add);
-            }
+        for (String value : pathValue.get().split(Pattern.quote(File.pathSeparator), -1)) {
+            path(value).ifPresent(entries::add);
         }
         return List.copyOf(entries);
+    }
+
+    private Optional<Path> powerShellExecutable() {
+        return environmentValue("SystemRoot")
+                .or(() -> environmentValue("WINDIR"))
+                .flatMap(CodexExecutableResolver::path)
+                .map(root -> root.resolve("System32")
+                        .resolve("WindowsPowerShell")
+                        .resolve("v1.0")
+                        .resolve("powershell.exe"))
+                .filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS))
+                .map(CodexExecutableResolver::normalizedAbsolute);
     }
 
     private Optional<String> environmentValue(String expectedKey) {
@@ -87,10 +104,29 @@ public final class CodexExecutableResolver {
     }
 
     private static Optional<Path> path(String value) {
+        String candidate = stripOuterQuotes(value.strip());
+        if (candidate.isBlank()) {
+            return Optional.empty();
+        }
         try {
-            return Optional.of(Path.of(value));
+            return Optional.of(Path.of(candidate));
         } catch (InvalidPathException exception) {
             return Optional.empty();
         }
+    }
+
+    private static String stripOuterQuotes(String value) {
+        if (value.length() >= 2) {
+            char first = value.charAt(0);
+            char last = value.charAt(value.length() - 1);
+            if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+                return value.substring(1, value.length() - 1);
+            }
+        }
+        return value;
+    }
+
+    private static Path normalizedAbsolute(Path path) {
+        return path.toAbsolutePath().normalize();
     }
 }

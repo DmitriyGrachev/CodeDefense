@@ -62,8 +62,9 @@ class CodexEnvironmentCheckerTest {
         Files.writeString(npmDirectory.resolve("codex.cmd"), "cmd shim");
         Path powerShellShim = Files.writeString(npmDirectory.resolve("codex.ps1"), "powershell shim");
         Path systemRoot = temporaryDirectory.resolve("Windows");
+        Path powerShell = createPowerShell(systemRoot);
         List<String> prefix = List.of(
-                systemRoot.resolve("System32/WindowsPowerShell/v1.0/powershell.exe").toString(),
+                powerShell.toString(),
                 "-NoLogo",
                 "-NoProfile",
                 "-NonInteractive",
@@ -238,7 +239,17 @@ class CodexEnvironmentCheckerTest {
     private Map<String, String> windowsNpmEnvironment() throws Exception {
         Path npmDirectory = Files.createDirectories(temporaryDirectory.resolve("npm"));
         Files.writeString(npmDirectory.resolve("codex.ps1"), "powershell shim");
-        return Map.of("PATH", npmDirectory.toString(), "SystemRoot", temporaryDirectory.resolve("Windows").toString());
+        Path systemRoot = temporaryDirectory.resolve("Windows");
+        createPowerShell(systemRoot);
+        return Map.of("PATH", npmDirectory.toString(), "SystemRoot", systemRoot.toString());
+    }
+
+    private static Path createPowerShell(Path systemRoot) throws Exception {
+        Path powerShellDirectory = Files.createDirectories(systemRoot
+                .resolve("System32")
+                .resolve("WindowsPowerShell")
+                .resolve("v1.0"));
+        return Files.writeString(powerShellDirectory.resolve("powershell.exe"), "powershell executable");
     }
 
     private static ProcessResult result(int exitCode, String stdout, String stderr) {

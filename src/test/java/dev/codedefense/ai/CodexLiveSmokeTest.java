@@ -1,6 +1,8 @@
 package dev.codedefense.ai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -8,8 +10,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
@@ -31,6 +36,7 @@ class CodexLiveSmokeTest {
     void executesAConstrainedStructuredCodexRequest() throws IOException {
         CodexRuntimeConfig config = CodexRuntimeConfig.defaults();
         ObjectMapper objectMapper = new ObjectMapper();
+        AtomicReference<Path> workspacePath = new AtomicReference<>();
         CodexEnvironmentChecker preflight = CodexEnvironmentChecker.forCurrentEnvironment(
                 new JdkProcessExecutor(),
                 config,
@@ -42,7 +48,11 @@ class CodexLiveSmokeTest {
                 new CodexProcessEnvironment(),
                 config,
                 objectMapper,
-                CodexTemporaryWorkspace::create,
+                () -> {
+                    CodexTemporaryWorkspace workspace = CodexTemporaryWorkspace.create();
+                    workspacePath.set(workspace.workspace());
+                    return workspace;
+                },
                 System.getenv());
         StructuredCodexRequest request = new StructuredCodexRequest(
                 "live-smoke",
@@ -58,6 +68,9 @@ class CodexLiveSmokeTest {
         assertEquals("ok", response.path("status").asText());
         assertTrue(response.path("message").isTextual());
         assertTrue(!response.path("message").asText().isBlank());
+        assertNotNull(workspacePath.get());
+        assertFalse(Files.exists(workspacePath.get(), LinkOption.NOFOLLOW_LINKS));
+        System.out.println("Live smoke JSON status: " + response.path("status").asText());
     }
 
     private static String schemaJson() throws IOException {

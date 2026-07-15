@@ -21,13 +21,13 @@ public final class CodexCommandFactory {
 
         List<String> command = new ArrayList<>(executable.commandPrefix());
         command.addAll(List.of(
+                "--ask-for-approval",
+                "never",
                 "exec",
                 "--ephemeral",
                 "--ignore-user-config",
                 "--sandbox",
                 "read-only",
-                "--ask-for-approval",
-                "never",
                 "--skip-git-repo-check",
                 "--color",
                 "never",

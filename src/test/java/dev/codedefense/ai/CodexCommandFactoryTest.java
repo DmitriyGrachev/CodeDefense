@@ -26,8 +26,8 @@ class CodexCommandFactoryTest {
         prefix.add("mutate");
 
         assertEquals(List.of(
-                "codex.cmd", "exec", "--ephemeral", "--ignore-user-config", "--sandbox", "read-only",
-                "--ask-for-approval", "never", "--skip-git-repo-check", "--color", "never",
+                "codex.cmd", "--ask-for-approval", "never", "exec", "--ephemeral", "--ignore-user-config", "--sandbox", "read-only",
+                "--skip-git-repo-check", "--color", "never",
                 "--model", "model with spaces", "--config", "model_reasoning_effort=\"medium\"",
                 "--cd", workspace.toString(), "--output-schema", schema.toString(),
                 "--output-last-message", output.toString(), "-"), command);
@@ -37,6 +37,7 @@ class CodexCommandFactoryTest {
         assertFalse(command.contains("danger-full-access"));
         assertFalse(command.contains("workspace-write"));
         assertFalse(command.contains("--ignore-rules"));
+        assertEquals("--ask-for-approval", command.get(1));
         assertEquals("-", command.getLast());
         assertThrows(UnsupportedOperationException.class, () -> command.add("mutate"));
     }

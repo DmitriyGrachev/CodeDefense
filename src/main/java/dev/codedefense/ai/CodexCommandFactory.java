@@ -40,8 +40,10 @@ public final class CodexCommandFactory {
                 "--output-schema",
                 schemaPath.toString(),
                 "--output-last-message",
-                finalMessagePath.toString(),
-                "-"));
+                finalMessagePath.toString()));
+        if (!executable.requiresImplicitStdinPrompt()) {
+            command.add("-");
+        }
         return List.copyOf(command);
     }
 }

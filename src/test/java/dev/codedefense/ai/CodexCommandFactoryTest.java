@@ -41,4 +41,31 @@ class CodexCommandFactoryTest {
         assertEquals("-", command.getLast());
         assertThrows(UnsupportedOperationException.class, () -> command.add("mutate"));
     }
+
+    @Test
+    void omitsTheExplicitStdinMarkerForThePowerShellFileShim() {
+        StructuredCodexRequest request = new StructuredCodexRequest(
+                "operation", "private prompt", "{\"private\":\"schema\"}", "model",
+                ReasoningEffort.LOW, Duration.ofSeconds(30));
+        Path workspace = Path.of("temporary workspace");
+        Path schema = workspace.resolve("schema.json");
+        Path output = workspace.resolve("final.json");
+
+        List<String> command = new CodexCommandFactory().create(
+                new CodexExecutable(List.of("powershell.exe", "-File", "codex.ps1")),
+                request,
+                workspace,
+                schema,
+                output);
+
+        assertEquals(List.of(
+                "powershell.exe", "-File", "codex.ps1", "--ask-for-approval", "never", "exec",
+                "--ephemeral", "--ignore-user-config", "--sandbox", "read-only", "--skip-git-repo-check",
+                "--color", "never", "--model", "model", "--config", "model_reasoning_effort=\"low\"",
+                "--cd", workspace.toString(), "--output-schema", schema.toString(),
+                "--output-last-message", output.toString()), command);
+        assertFalse(command.contains("-"));
+        assertFalse(command.contains("private prompt"));
+        assertFalse(command.contains("{\"private\":\"schema\"}"));
+    }
 }

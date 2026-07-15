@@ -35,11 +35,14 @@ Iteration 4 replaces the final placeholder with a **Codex readiness check**, and
 - The opt-in live smoke test is disabled unless a system property explicitly enables it.
 - No `--yolo`, `danger-full-access`, or `workspace-write`.
 - Use `--sandbox read-only`.
-- Use `--ask-for-approval never`.
+- Pass `--ask-for-approval never` before the `exec` subcommand.
 - Use an empty temporary workspace.
 - Use `--ephemeral`.
 - Use `--output-schema` and `--output-last-message`.
-- Use `-` as the prompt argument and write the prompt through stdin.
+- Native Codex launchers use `-` as the explicit prompt sentinel. Windows npm
+  `codex.ps1` launchers omit that sentinel because PowerShell `-File` binds a
+  bare `-` itself. In both cases, write the complete prompt through stdin and
+  close stdin after writing.
 - Delete temporary files in `finally`/`AutoCloseable`.
 - Bound stdout, stderr, and final-response memory usage.
 - Expected failures must not print Java stack traces.
@@ -49,11 +52,10 @@ Iteration 4 replaces the final placeholder with a **Codex readiness check**, and
 The adapter should construct the semantic equivalent of:
 
 ```text
-codex exec
+codex --ask-for-approval never exec
   --ephemeral
   --ignore-user-config
   --sandbox read-only
-  --ask-for-approval never
   --skip-git-repo-check
   --color never
   --model gpt-5.6-terra
@@ -61,10 +63,13 @@ codex exec
   --cd <empty-temporary-workspace>
   --output-schema <temporary-schema.json>
   --output-last-message <temporary-final-message.json>
-  -
+  [native launchers only: -]
 ```
 
-The prompt is written to process stdin and stdin is then closed.
+Native Codex launchers receive the explicit `-` prompt sentinel. Windows npm
+`codex.ps1` launchers are invoked through PowerShell `-File`, which binds a
+bare `-` itself, so they omit the sentinel. Both launcher variants receive the
+complete prompt through process stdin, and stdin is then closed.
 
 Do **not** use:
 
@@ -590,13 +595,13 @@ Expected order:
 
 ```text
 <codex executable prefix>
+--ask-for-approval
+never
 exec
 --ephemeral
 --ignore-user-config
 --sandbox
 read-only
---ask-for-approval
-never
 --skip-git-repo-check
 --color
 never
@@ -610,6 +615,7 @@ model_reasoning_effort="<request effort>"
 <temporary schema path>
 --output-last-message
 <temporary output path>
+[native launcher only]
 -
 ```
 
@@ -617,6 +623,9 @@ Requirements:
 
 - prompt is absent from the command list;
 - schema content is absent from the command list;
+- native launchers end with the explicit `-` prompt sentinel;
+- Windows npm `codex.ps1` launchers omit the sentinel and receive the prompt
+  only through stdin;
 - only paths to temporary files are included;
 - paths with spaces remain one command token;
 - model remains one command token;
@@ -903,7 +912,7 @@ Rules:
 - `--color never`;
 - model and reasoning effort;
 - output schema and final-message paths;
-- final `-`;
+- native final `-`, but no final sentinel for Windows npm `codex.ps1`;
 - prompt absent;
 - no `--yolo`;
 - no full access;

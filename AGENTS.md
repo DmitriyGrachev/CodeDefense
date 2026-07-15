@@ -29,7 +29,7 @@ through the locally authenticated Codex CLI.
 
 ## Development process
 
-- Read docs/implementation-plan.md before changing code.
+- Read docs/codedefense-mvp-implementation-plan.md before changing code.
 - Implement only the explicitly requested iteration.
 - Do not begin the next iteration automatically.
 - Use small focused classes.

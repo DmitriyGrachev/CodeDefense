@@ -5,7 +5,7 @@
 - [x] Iteration 2 — deterministic filesystem discovery and filtering.
 - [x] Iteration 3 — prioritization, redaction, and bounded snapshots.
 - [x] Iteration 4 — Codex environment checking and process adapter.
-- [ ] Iteration 5 — project analysis and terminal overview.
+- [x] Iteration 5 — project analysis and terminal overview.
 - [ ] Iteration 6 — adaptive three-question interview.
 - [ ] Iteration 7 — Markdown reports and report command.
 - [ ] Iteration 8 — embedded sample project.

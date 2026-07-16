@@ -45,6 +45,7 @@ public final class ProjectAnalysisValidator {
         Map<String, Integer> selectedLines = selectedLines(snapshot);
         List<ProjectComponent> components = validateComponents(analysis.components(), selectedLines);
         List<TechnicalQuestion> questions = validateQuestions(analysis.questions(), selectedLines);
+        validateUniqueNormalized(analysis.mainFlow());
         validateUniqueNormalized(analysis.criticalTopics());
 
         return new ProjectAnalysis(

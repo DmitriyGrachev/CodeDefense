@@ -27,15 +27,25 @@ public final class ProjectAnalysisPromptFactory {
 
     public String create(ProjectSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "Project snapshot");
+        String content = snapshot.promptContent();
+        String boundary = boundaryFor(content);
         return new StringBuilder(loadInstructions())
                 .append("\n\nProject name: ").append(snapshot.projectName())
                 .append("\nProject type: ").append(snapshot.projectType())
                 .append("\nSelected files: ").append(snapshot.selectedFiles().size())
                 .append("\nSnapshot bytes: ").append(snapshot.promptBytes())
-                .append("\n\n<project_snapshot>\n")
-                .append(snapshot.promptContent())
-                .append("\n</project_snapshot>\n")
+                .append("\n\nBEGIN ").append(boundary).append('\n')
+                .append(content)
+                .append("\nEND ").append(boundary).append('\n')
                 .toString();
+    }
+
+    private static String boundaryFor(String content) {
+        String boundary = "CODEDEFENSE_UNTRUSTED_SNAPSHOT";
+        while (content.contains(boundary)) {
+            boundary += "_X";
+        }
+        return boundary;
     }
 
     private String loadInstructions() {

@@ -29,11 +29,9 @@ class ProjectAnalysisSchemaTest {
         assertStringBounds(properties.path("projectType"), 1, 120);
         assertStringBounds(properties.path("summary"), 20, 1200);
         assertArrayBounds(properties.path("mainFlow"), 2, 8);
-        assertTrue(properties.path("mainFlow").path("uniqueItems").asBoolean());
         assertStringBounds(properties.path("mainFlow").path("items"), 3, 300);
         assertArrayBounds(properties.path("components"), 1, 12);
         assertArrayBounds(properties.path("criticalTopics"), 2, 8);
-        assertTrue(properties.path("criticalTopics").path("uniqueItems").asBoolean());
         assertStringBounds(properties.path("criticalTopics").path("items"), 2, 160);
 
         JsonNode component = properties.path("components").path("items");
@@ -42,7 +40,6 @@ class ProjectAnalysisSchemaTest {
         assertStringBounds(component.path("properties").path("kind"), 1, 64);
         assertStringBounds(component.path("properties").path("responsibility"), 5, 500);
         assertArrayBounds(component.path("properties").path("paths"), 1, 5);
-        assertTrue(component.path("properties").path("paths").path("uniqueItems").asBoolean());
         assertStringBounds(component.path("properties").path("paths").path("items"), 1, 300);
 
         JsonNode questions = properties.path("questions");
@@ -57,7 +54,6 @@ class ProjectAnalysisSchemaTest {
         assertBoundedArray(expectedKeyPoints);
         assertEquals(2, expectedKeyPoints.path("minItems").asInt());
         assertEquals(6, expectedKeyPoints.path("maxItems").asInt());
-        assertTrue(expectedKeyPoints.path("uniqueItems").asBoolean());
         assertStringBounds(expectedKeyPoints.path("items"), 2, 300);
 
         JsonNode evidence = question.path("properties").path("evidence");
@@ -70,6 +66,7 @@ class ProjectAnalysisSchemaTest {
         assertStringBounds(evidenceItem.path("properties").path("reason"), 3, 300);
         assertEquals("integer", evidenceItem.path("properties").path("startLine").path("type").asText());
         assertEquals("integer", evidenceItem.path("properties").path("endLine").path("type").asText());
+        assertKeywordAbsent(schema, "uniqueItems");
     }
 
     private static void assertStrictObject(JsonNode object, String... fields) {
@@ -107,5 +104,10 @@ class ProjectAnalysisSchemaTest {
         assertBoundedArray(node);
         assertEquals(minimum, node.path("minItems").asInt());
         assertEquals(maximum, node.path("maxItems").asInt());
+    }
+
+    private static void assertKeywordAbsent(JsonNode node, String keyword) {
+        assertFalse(node.has(keyword), "unsupported schema keyword: " + keyword);
+        node.elements().forEachRemaining(child -> assertKeywordAbsent(child, keyword));
     }
 }

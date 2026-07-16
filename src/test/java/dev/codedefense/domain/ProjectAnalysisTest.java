@@ -102,6 +102,19 @@ class ProjectAnalysisTest {
         assertFalse(rendered.contains("evidence-reason"));
     }
 
+    @Test
+    void technicalQuestionToStringHidesPromptAndInternalGradingData() {
+        TechnicalQuestion question = question("startup");
+        String rendered = question.toString();
+
+        assertTrue(rendered.contains("startup"));
+        assertTrue(rendered.contains("expectedKeyPointCount=2"));
+        assertTrue(rendered.contains("evidenceCount=1"));
+        assertFalse(rendered.contains("How does startup work?"));
+        assertFalse(rendered.contains("private-key-point"));
+        assertFalse(rendered.contains("evidence-reason"));
+    }
+
     private static ProjectAnalysis analysis() {
         return new ProjectAnalysis(
                 "CodeDefense", "Java CLI", "A command-line application",

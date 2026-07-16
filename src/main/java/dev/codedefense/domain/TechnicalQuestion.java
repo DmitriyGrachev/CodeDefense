@@ -23,4 +23,10 @@ public record TechnicalQuestion(
             throw new IllegalArgumentException("evidence must contain between one and three entries");
         }
     }
+
+    @Override
+    public String toString() {
+        return "TechnicalQuestion[id=%s, learningGoal=%s, expectedKeyPointCount=%d, evidenceCount=%d]"
+                .formatted(id, learningGoal, expectedKeyPoints.size(), evidence.size());
+    }
 }

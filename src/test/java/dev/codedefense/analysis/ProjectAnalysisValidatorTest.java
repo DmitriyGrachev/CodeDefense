@@ -117,6 +117,17 @@ class ProjectAnalysisValidatorTest {
     }
 
     @Test
+    void rejectsMainFlowEntriesThatDuplicateAfterNormalization() {
+        ProjectAnalysis base = validAnalysis();
+        ProjectAnalysis duplicateFlow = new ProjectAnalysis(
+                base.projectName(), base.projectType(), base.summary(),
+                List.of(" The CLI   parses input ", "the cli parses INPUT"),
+                base.components(), base.criticalTopics(), base.questions());
+
+        assertInvalid(duplicateFlow);
+    }
+
+    @Test
     void enforcesExactSchemaBoundsLocally() {
         ProjectAnalysis base = validAnalysis();
         assertInvalid(new ProjectAnalysis(base.projectName(), base.projectType(), "x".repeat(19),

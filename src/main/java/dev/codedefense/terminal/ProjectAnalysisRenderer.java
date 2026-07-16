@@ -46,12 +46,19 @@ public final class ProjectAnalysisRenderer {
         String normalizedLines = withoutSequences.replace("\r\n", "\n").replace('\r', '\n');
         StringBuilder safe = new StringBuilder(normalizedLines.length());
         normalizedLines.codePoints().forEach(codePoint -> {
-            if (codePoint == '\n' || codePoint == '\t') {
+            if (codePoint == '\n' || codePoint == '\t' || codePoint == 0x2028 || codePoint == 0x2029) {
                 safe.append(' ');
-            } else if (!Character.isISOControl(codePoint)) {
+            } else if (!Character.isISOControl(codePoint) && !isBidiFormatControl(codePoint)) {
                 safe.appendCodePoint(codePoint);
             }
         });
         return safe.toString().strip();
+    }
+
+    private static boolean isBidiFormatControl(int codePoint) {
+        return codePoint == 0x061C
+                || codePoint >= 0x200E && codePoint <= 0x200F
+                || codePoint >= 0x202A && codePoint <= 0x202E
+                || codePoint >= 0x2066 && codePoint <= 0x2069;
     }
 }

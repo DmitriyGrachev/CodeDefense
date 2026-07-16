@@ -1,13 +1,16 @@
 package dev.codedefense.cli;
 
 import dev.codedefense.application.CodeDefenseConfig;
-import dev.codedefense.ai.CodexEnvironment;
-import dev.codedefense.ai.CodexExecutable;
+import dev.codedefense.domain.CodeEvidence;
+import dev.codedefense.domain.ProjectAnalysis;
+import dev.codedefense.domain.ProjectComponent;
 import dev.codedefense.domain.ScanSummary;
 import dev.codedefense.domain.SourceFile;
+import dev.codedefense.domain.TechnicalQuestion;
 import dev.codedefense.scanner.ProjectScanner;
 import dev.codedefense.scanner.ProjectSnapshotBuilder;
 import dev.codedefense.terminal.ConfirmationPrompt;
+import dev.codedefense.terminal.ProjectAnalysisRenderer;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
@@ -66,7 +69,8 @@ class StartCommandSnapshotTest {
                 scanner,
                 new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
                 confirmation,
-                () -> new CodexEnvironment(new CodexExecutable(List.of("codex")), "test")));
+                snapshot -> analysis(),
+                new ProjectAnalysisRenderer()));
         commandLine.setOut(new PrintWriter(output, true, StandardCharsets.UTF_8));
         return commandLine;
     }
@@ -76,6 +80,26 @@ class StartCommandSnapshotTest {
         Files.writeString(file, "class App {}");
         long fileSize = Files.size(file);
         return (path, policy) -> new ScanSummary(root, 1, 0, List.of(new SourceFile(file.getFileName(), fileSize)));
+    }
+
+    private static ProjectAnalysis analysis() {
+        return new ProjectAnalysis(
+                "fixture",
+                "Java",
+                "Fixture analysis.",
+                List.of("The command starts the fixture.", "The fixture validates input."),
+                List.of(new ProjectComponent("Command", "entry-point", "Starts the fixture.", List.of("App.java"))),
+                List.of("startup", "validation"),
+                List.of(question("startup"), question("flow"), question("safety")));
+    }
+
+    private static TechnicalQuestion question(String id) {
+        return new TechnicalQuestion(
+                id,
+                "How does " + id + " work?",
+                "Understand " + id,
+                List.of("Expected point", "Second expected point"),
+                List.of(new CodeEvidence("App.java", 1, 1, "Fixture evidence.")));
     }
 
     private static final class CountingConfirmation implements ConfirmationPrompt {

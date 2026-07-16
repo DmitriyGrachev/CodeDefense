@@ -65,10 +65,14 @@ public final class ProjectAnalysisPromptFactory {
                 }
                 output.write(buffer, 0, read);
             }
-            return decodeUtf8(output.toByteArray());
+            return normalizeLineEndings(decodeUtf8(output.toByteArray()));
         } catch (IOException | RuntimeException exception) {
             throw unavailable();
         }
+    }
+
+    private static String normalizeLineEndings(String text) {
+        return text.replace("\r\n", "\n").replace('\r', '\n');
     }
 
     private static String decodeUtf8(byte[] bytes) throws CharacterCodingException {

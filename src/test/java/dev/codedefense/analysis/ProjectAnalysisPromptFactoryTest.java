@@ -138,6 +138,17 @@ class ProjectAnalysisPromptFactoryTest {
     }
 
     @Test
+    void normalizesInjectedCrLfAndLoneCrTemplateToLf() {
+        byte[] template = "first line\r\nsecond line\rthird line".getBytes(StandardCharsets.UTF_8);
+
+        String prompt = new ProjectAnalysisPromptFactory(resource(template))
+                .create(snapshot("fixture-project", "snapshot"));
+
+        assertTrue(prompt.startsWith("first line\nsecond line\nthird line\n\nBEGIN "));
+        assertFalse(prompt.contains("\r"));
+    }
+
+    @Test
     void rejectsMissingMalformedUtf8AndOversizedPromptTemplatesSafely() {
         assertUnavailable(new ProjectAnalysisPromptFactory(resource(null)));
         assertUnavailable(new ProjectAnalysisPromptFactory(resource(new byte[] {(byte) 0xC3, (byte) 0x28})));

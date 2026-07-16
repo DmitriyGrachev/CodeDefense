@@ -1,18 +1,16 @@
 package dev.codedefense.cli;
 
-import dev.codedefense.ai.CodexEnvironment;
-import dev.codedefense.ai.CodexEnvironmentChecker;
-import dev.codedefense.ai.CodexPreflight;
-import dev.codedefense.ai.CodexProcessEnvironment;
-import dev.codedefense.ai.CodexRuntimeConfig;
-import dev.codedefense.ai.JdkProcessExecutor;
 import dev.codedefense.ai.exception.CodexExecutionException;
 import dev.codedefense.ai.exception.CodexInterruptedException;
 import dev.codedefense.ai.exception.CodexNotAuthenticatedException;
 import dev.codedefense.ai.exception.CodexNotInstalledException;
 import dev.codedefense.ai.exception.CodexTimeoutException;
+import dev.codedefense.ai.exception.InvalidCodexResponseException;
+import dev.codedefense.analysis.ProjectAnalyzer;
+import dev.codedefense.analysis.ProjectAnalysisRuntimeFactory;
 import dev.codedefense.application.CodeDefenseConfig;
 import dev.codedefense.domain.EmptyProjectSnapshotException;
+import dev.codedefense.domain.ProjectAnalysis;
 import dev.codedefense.domain.ScanSummary;
 import dev.codedefense.scanner.FileSystemProjectScanner;
 import dev.codedefense.scanner.InvalidProjectPathException;
@@ -22,6 +20,7 @@ import dev.codedefense.scanner.ProjectSnapshotBuilder;
 import dev.codedefense.scanner.ScanPolicy;
 import dev.codedefense.terminal.ConfirmationPrompt;
 import dev.codedefense.terminal.ConsoleConfirmationPrompt;
+import dev.codedefense.terminal.ProjectAnalysisRenderer;
 import java.nio.file.Path;
 import java.util.Objects;
 import picocli.CommandLine.Command;
@@ -38,14 +37,15 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
     private final ProjectScanner scanner;
     private final ProjectSnapshotBuilder snapshotBuilder;
     private final ConfirmationPrompt confirmation;
-    private final CodexPreflight preflight;
+    private final ProjectAnalyzer analyzer;
+    private final ProjectAnalysisRenderer analysisRenderer;
 
     @Parameters(index = "0", arity = "0..1", defaultValue = ".", paramLabel = "PATH", description = "Repository path (default: current directory).")
     private Path path;
 
     @Option(names = "--dry-run", description = "Discover supported files without starting a defense.")
     private boolean dryRun;
-    @Option(names = {"-y", "--yes"}, description = "Skip confirmation.") private boolean yes;
+    @Option(names = {"-y", "--yes"}, description = "Skip confirmation; analysis can consume Codex credits.") private boolean yes;
 
     @Spec
     private CommandSpec commandSpec;
@@ -55,22 +55,26 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
                 new FileSystemProjectScanner(),
                 new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
                 new ConsoleConfirmationPrompt(),
-                productionPreflight());
+                new ProjectAnalysisRuntimeFactory().create(),
+                new ProjectAnalysisRenderer());
     }
 
     StartCommand(ProjectScanner scanner) {
-        this(scanner, new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()), prompt -> false, productionPreflight());
+        this(scanner, new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()), prompt -> false,
+                new ProjectAnalysisRuntimeFactory().create(), new ProjectAnalysisRenderer());
     }
 
     StartCommand(
             ProjectScanner scanner,
             ProjectSnapshotBuilder snapshotBuilder,
             ConfirmationPrompt confirmation,
-            CodexPreflight preflight) {
+            ProjectAnalyzer analyzer,
+            ProjectAnalysisRenderer analysisRenderer) {
         this.scanner = Objects.requireNonNull(scanner, "Project scanner");
         this.snapshotBuilder = Objects.requireNonNull(snapshotBuilder, "Project snapshot builder");
         this.confirmation = Objects.requireNonNull(confirmation, "Confirmation prompt");
-        this.preflight = Objects.requireNonNull(preflight, "Codex preflight");
+        this.analyzer = Objects.requireNonNull(analyzer, "Project analyzer");
+        this.analysisRenderer = Objects.requireNonNull(analysisRenderer, "Project analysis renderer");
     }
 
     public Path path() {
@@ -94,11 +98,9 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             String prompt = "Send selected snapshot to Codex? [y/N]";
             if (!yes) commandSpec.commandLine().getOut().println(prompt);
             if (!yes && !confirmation.confirm(prompt)) { commandSpec.commandLine().getOut().println("Cancelled before any source content was sent."); return ExitCodes.SUCCESS; }
-            CodexEnvironment environment = preflight.checkReady();
-            commandSpec.commandLine().getOut().printf(
-                    "Codex CLI is installed and authenticated.%nVersion: %s%n"
-                            + "Project analysis will be connected in Iteration 5.%n",
-                    environment.version());
+            commandSpec.commandLine().getOut().println("Analyzing project with GPT-5.6...");
+            ProjectAnalysis analysis = analyzer.analyze(snapshot);
+            analysisRenderer.render(analysis, commandSpec.commandLine().getOut());
             return ExitCodes.SUCCESS;
         } catch (InvalidProjectPathException exception) {
             commandSpec.commandLine().getErr().println(exception.getMessage());
@@ -109,6 +111,9 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
         } catch (EmptyProjectSnapshotException exception) {
             commandSpec.commandLine().getErr().println(exception.getMessage());
             return ExitCodes.NO_SUPPORTED_SOURCE_FILES;
+        } catch (InvalidCodexResponseException exception) {
+            commandSpec.commandLine().getErr().println(exception.getMessage());
+            return ExitCodes.INVALID_MODEL_RESPONSE;
         } catch (CodexNotInstalledException exception) {
             commandSpec.commandLine().getErr().println(exception.getMessage());
             return ExitCodes.CODEX_NOT_INSTALLED;
@@ -125,11 +130,4 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
         }
     }
 
-    private static CodexPreflight productionPreflight() {
-        return CodexEnvironmentChecker.forCurrentEnvironment(
-                new JdkProcessExecutor(),
-                CodexRuntimeConfig.defaults(),
-                new CodexProcessEnvironment(),
-                Path.of(".").toAbsolutePath().normalize());
-    }
 }

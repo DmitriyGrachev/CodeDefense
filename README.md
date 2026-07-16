@@ -1,6 +1,6 @@
 # CodeDefense
 
-CodeDefense is a Java 21 command-line application that helps developers prove they understand an AI-assisted local codebase. It creates a privacy-aware, bounded repository snapshot and uses the locally authenticated Codex CLI for the future technical-defense workflow.
+CodeDefense is a Java 21 command-line application that helps developers prove they understand an AI-assisted local codebase. It creates a privacy-aware, bounded repository snapshot and uses the locally authenticated Codex CLI for the technical-defense workflow.
 
 ## Requirements
 
@@ -27,11 +27,13 @@ java -jar target/codedefense.jar start . --dry-run
 java -jar target/codedefense.jar start . --yes
 ```
 
-`--dry-run` scans and previews the bounded snapshot without sending source content or invoking Codex. In Iteration 4, `--yes` bypasses confirmation and performs only the local Codex preflight (`codex --version` and `codex login status`); it does not run `codex exec` or consume model credits.
+`--dry-run` scans and previews the bounded snapshot without sending source content, invoking Codex, or consuming credits. Starting with Iteration 5, `--yes` bypasses confirmation and performs one real structured project-analysis request through the locally authenticated Codex CLI. That request consumes Codex credits.
+
+The Iteration 5 overview includes the project summary, main flow, key components, critical topics, and the count of prepared technical questions. Exactly three repository-specific questions are prepared for the later adaptive-defense workflow. Their prompts and internal expected answers are not displayed yet.
 
 ## Privacy model
 
-CodeDefense selects at most 30 files and limits the snapshot to 120 KiB. It previews the selected relative paths before source content can be sent, excludes known secret and generated files, avoids symbolic links, and redacts common secret assignments as defense in depth. Review the preview before confirming: redaction is not a guarantee that a repository contains no sensitive material.
+CodeDefense selects at most 30 files and limits the snapshot to 120 KiB. It previews the selected relative paths before source content can be sent, excludes known secret and generated files, avoids symbolic links, and redacts common secret assignments as defense in depth. Repository content is treated as untrusted data: instructions found in source files, READMEs, comments, configuration, or generated text are not followed. Review the preview before confirming: redaction is not a guarantee that a repository contains no sensitive material.
 
 ## Codex launcher support
 
@@ -57,6 +59,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0–3 provide the executable CLI, deterministic local discovery, and privacy-aware bounded snapshots. Iteration 4 provides Codex preflight, safe structured process execution, and the opt-in live smoke test. Project analysis, technical questions, interview flow, and reports remain out of scope until later iterations.
+Iterations 0-3 provide the executable CLI, deterministic local discovery, and privacy-aware bounded snapshots. Iteration 4 provides Codex preflight, safe structured process execution, and the opt-in live smoke test. Iteration 5 adds one structured project-analysis request and a safe terminal overview; interactive questioning, answer evaluation, and reports remain out of scope until later iterations.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

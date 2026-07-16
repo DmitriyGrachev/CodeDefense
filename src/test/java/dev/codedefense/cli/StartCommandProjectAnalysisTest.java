@@ -130,6 +130,22 @@ class StartCommandProjectAnalysisTest {
     }
 
     @Test
+    void unavailableAnalysisResourcesReturnExitCodeSevenWithoutAStackTrace() throws Exception {
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+        CommandLine commandLine = commandLine(
+                new CountingAnalyzer(new CodexExecutionException(
+                        -1, "Project analysis resources are unavailable.")),
+                new CountingConfirmation(true),
+                new ByteArrayOutputStream(),
+                error);
+
+        assertEquals(ExitCodes.CODEX_EXECUTION_FAILED, commandLine.execute("--yes", root.toString()));
+        String renderedError = error.toString(StandardCharsets.UTF_8);
+        assertTrue(renderedError.contains("Project analysis resources are unavailable."));
+        assertNoStackTrace(error);
+    }
+
+    @Test
     void missingCodexRemainsExitCodeFive() throws Exception {
         ByteArrayOutputStream error = new ByteArrayOutputStream();
         CommandLine commandLine = commandLine(

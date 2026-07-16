@@ -27,15 +27,18 @@ public final class ProjectAnalysisPromptFactory {
 
     public String create(ProjectSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "Project snapshot");
-        String content = snapshot.promptContent();
-        String boundary = boundaryFor(content);
-        return new StringBuilder(loadInstructions())
-                .append("\n\nProject name: ").append(snapshot.projectName())
+        String untrustedPayload = new StringBuilder()
+                .append("Project name: ").append(snapshot.projectName())
                 .append("\nProject type: ").append(snapshot.projectType())
                 .append("\nSelected files: ").append(snapshot.selectedFiles().size())
                 .append("\nSnapshot bytes: ").append(snapshot.promptBytes())
+                .append("\n\n")
+                .append(snapshot.promptContent())
+                .toString();
+        String boundary = boundaryFor(untrustedPayload);
+        return new StringBuilder(loadInstructions())
                 .append("\n\nBEGIN ").append(boundary).append('\n')
-                .append(content)
+                .append(untrustedPayload)
                 .append("\nEND ").append(boundary).append('\n')
                 .toString();
     }

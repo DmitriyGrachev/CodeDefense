@@ -8,6 +8,7 @@ import dev.codedefense.ai.ReasoningEffort;
 import dev.codedefense.ai.CodexRuntimeConfig;
 import dev.codedefense.ai.StructuredCodexRequest;
 import dev.codedefense.ai.StructuredCodexResult;
+import dev.codedefense.ai.exception.CodexExecutionException;
 import dev.codedefense.ai.exception.InvalidCodexResponseException;
 import dev.codedefense.domain.ProjectAnalysis;
 import dev.codedefense.domain.ProjectSnapshot;
@@ -46,15 +47,23 @@ public final class AiProjectAnalyzer implements ProjectAnalyzer {
     @Override
     public ProjectAnalysis analyze(ProjectSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "Project snapshot");
-        StructuredCodexRequest request = new StructuredCodexRequest(
-                "project-analysis",
-                promptFactory.create(snapshot),
-                schemaLoader.load(),
-                runtimeConfig.defaultModel(),
-                ReasoningEffort.MEDIUM,
-                runtimeConfig.defaultExecutionTimeout());
+        StructuredCodexRequest request = createRequest(snapshot);
         StructuredCodexResult result = aiProvider.execute(request);
         return validator.validate(parse(result.finalJson()), snapshot);
+    }
+
+    private StructuredCodexRequest createRequest(ProjectSnapshot snapshot) {
+        try {
+            return new StructuredCodexRequest(
+                    "project-analysis",
+                    promptFactory.create(snapshot),
+                    schemaLoader.load(),
+                    runtimeConfig.defaultModel(),
+                    ReasoningEffort.MEDIUM,
+                    runtimeConfig.defaultExecutionTimeout());
+        } catch (IllegalStateException exception) {
+            throw new CodexExecutionException(-1, "Project analysis resources are unavailable.");
+        }
     }
 
     private ProjectAnalysis parse(String finalJson) {

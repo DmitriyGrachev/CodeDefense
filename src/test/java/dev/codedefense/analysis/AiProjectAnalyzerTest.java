@@ -10,9 +10,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.codedefense.ai.AiProvider;
 import dev.codedefense.ai.ReasoningEffort;
+import dev.codedefense.ai.CodexRuntimeConfig;
 import dev.codedefense.ai.StructuredCodexRequest;
 import dev.codedefense.ai.StructuredCodexResult;
 import dev.codedefense.ai.exception.InvalidCodexResponseException;
+import dev.codedefense.ai.exception.CodexExecutionException;
 import dev.codedefense.ai.exception.CodexNotInstalledException;
 import dev.codedefense.domain.CodeEvidence;
 import dev.codedefense.domain.ProjectAnalysis;
@@ -130,6 +132,60 @@ class AiProjectAnalyzerTest {
     @Test
     void productionRuntimeFactoryBuildsALazyAnalyzerWithoutCallingCodex() {
         assertNotNull(new ProjectAnalysisRuntimeFactory().create());
+    }
+
+    @Test
+    void mapsMissingPromptResourceToSafeExecutionFailureWithoutCallingProvider() throws Exception {
+        CapturingAiProvider provider = providerWithValidResult();
+        AiProjectAnalyzer analyzer = analyzer(
+                provider,
+                new ProjectAnalysisPromptFactory(new ClassLoader(null) {}),
+                new ProjectAnalysisSchemaLoader());
+
+        assertUnavailableResources(analyzer, provider);
+    }
+
+    @Test
+    void mapsMissingSchemaResourceToSafeExecutionFailureWithoutCallingProvider() throws Exception {
+        CapturingAiProvider provider = providerWithValidResult();
+        AiProjectAnalyzer analyzer = analyzer(
+                provider,
+                new ProjectAnalysisPromptFactory(),
+                new ProjectAnalysisSchemaLoader(new ClassLoader(null) {}));
+
+        assertUnavailableResources(analyzer, provider);
+    }
+
+    private static void assertUnavailableResources(AiProjectAnalyzer analyzer, CapturingAiProvider provider) {
+        CodexExecutionException exception = assertThrows(
+                CodexExecutionException.class,
+                () -> analyzer.analyze(snapshot("private-snapshot-content")));
+
+        assertEquals("Codex execution failed with exit code -1.\nProject analysis resources are unavailable.",
+                exception.getMessage());
+        assertNull(exception.getCause());
+        assertEquals(0, provider.callCount());
+        assertFalse(exception.getMessage().contains("private-snapshot-content"));
+        assertFalse(exception.getMessage().contains("prompt resource"));
+        assertFalse(exception.getMessage().contains("schema resource"));
+    }
+
+    private static AiProjectAnalyzer analyzer(
+            AiProvider provider,
+            ProjectAnalysisPromptFactory promptFactory,
+            ProjectAnalysisSchemaLoader schemaLoader) {
+        return new AiProjectAnalyzer(
+                provider,
+                promptFactory,
+                schemaLoader,
+                new ProjectAnalysisValidator(),
+                new ObjectMapper(),
+                CodexRuntimeConfig.defaults());
+    }
+
+    private static CapturingAiProvider providerWithValidResult() throws Exception {
+        return new CapturingAiProvider(new StructuredCodexResult(
+                new ObjectMapper().writeValueAsString(validAnalysis()), Duration.ZERO, "gpt-5.6-terra"));
     }
 
     private static String resourceText(String path) throws Exception {

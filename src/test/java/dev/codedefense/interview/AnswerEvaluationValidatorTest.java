@@ -26,6 +26,16 @@ class AnswerEvaluationValidatorTest {
             assertEquals("Codex returned an invalid answer evaluation.", error.getMessage());
         }
     }
+    @Test void rejectsANullScoreBeforeVerdictBandValidation() {
+        AnswerEvaluationValidator.Payload payload = new AnswerEvaluationValidator.Payload(
+                "INCORRECT", null, "Useful concise feedback", List.of(), List.of(), "");
+
+        InvalidCodexResponseException error = assertThrows(
+                InvalidCodexResponseException.class, () -> validator.validate(payload, request()));
+
+        assertEquals("Codex returned an invalid answer evaluation.", error.getMessage());
+    }
+
     private static AnswerEvaluationValidator.Payload payload(String verdict, int score, List<String> understood, List<String> missing, String followUp) {
         return new AnswerEvaluationValidator.Payload(verdict, score, "Useful concise feedback", understood, missing, followUp);
     }

@@ -4,6 +4,17 @@ import dev.codedefense.domain.*;
 import java.io.*; import java.util.*;
 import org.junit.jupiter.api.Test;
 class ConsoleInterviewOutputTest {
+ @Test void rendersTheModelEvaluationScoreWithoutRenderingTheFinalQuestionScore() {
+  StringWriter sink=new StringWriter(); ConsoleInterviewOutput out=new ConsoleInterviewOutput(new PrintWriter(sink));
+  AnswerEvaluation evaluation=new AnswerEvaluation(Verdict.PARTIAL,61,"Useful feedback",List.of(),List.of(),Optional.empty());
+
+  out.renderEvaluation(evaluation);
+
+  assertTrue(sink.toString().contains("Verdict: Partial"));
+  assertTrue(sink.toString().contains("Score: 61/100"));
+  assertFalse(sink.toString().contains("Question 1 score:"));
+ }
+
  @Test void rendersOnlySafeInterviewFields() {
   StringWriter sink=new StringWriter(); ConsoleInterviewOutput out=new ConsoleInterviewOutput(new PrintWriter(sink));
   TechnicalQuestion q=new TechnicalQuestion("q1","Explain flow\u001b[31m?","GOAL_SECRET",List.of("KEY_SECRET","OTHER_SECRET"),List.of(new CodeEvidence("src/App.java",2,4,"REASON_SECRET")));

@@ -6,10 +6,10 @@ public final class InterviewEngine implements InterviewRunner {
  private final InterviewScorer scorer; private final ReadinessClassifier classifier; private final InterviewConfig config;
  public InterviewEngine(AnswerEvaluator evaluator,UserInput input,InterviewOutput output,InterviewScorer scorer,ReadinessClassifier classifier,InterviewConfig config){this.evaluator=Objects.requireNonNull(evaluator);this.input=Objects.requireNonNull(input);this.output=Objects.requireNonNull(output);this.scorer=Objects.requireNonNull(scorer);this.classifier=Objects.requireNonNull(classifier);this.config=Objects.requireNonNull(config);}
  @Override public InterviewSession conduct(ProjectAnalysis analysis){
-  Objects.requireNonNull(analysis); if(analysis.questions().size()!=config.primaryQuestionCount())throw new IllegalArgumentException("Exactly three questions are required");
-  output.renderIntroduction(config.primaryQuestionCount()); List<QuestionResult> results=new ArrayList<>(3); int skipped=0;
-  for(int index=0;index<3;index++){
-   TechnicalQuestion question=analysis.questions().get(index); int number=index+1; output.renderPrimaryQuestion(number,3,question);
+  Objects.requireNonNull(analysis); int total=config.primaryQuestionCount(); if(analysis.questions().size()!=total)throw new IllegalArgumentException("Project analysis question count does not match the interview configuration");
+  output.renderIntroduction(total); List<QuestionResult> results=new ArrayList<>(total); int skipped=0;
+  for(int index=0;index<total;index++){
+   TechnicalQuestion question=analysis.questions().get(index); int number=index+1; output.renderPrimaryQuestion(number,total,question);
    String primaryAnswer=readValid(); AnswerEvaluation primaryEvaluation;
    if(isSkip(primaryAnswer)){primaryEvaluation=AnswerEvaluation.skipped();output.renderSkipped(false);skipped++;}
    else{output.renderEvaluating();primaryEvaluation=evaluator.evaluate(request(analysis,question,EvaluationStage.PRIMARY,primaryAnswer,question.prompt(),primaryAnswer,Optional.empty()));output.renderEvaluation(primaryEvaluation);}

@@ -19,6 +19,14 @@ class InterviewEngineTest {
   InterviewSession session=engine(evaluator,new QueueInput(" SKIP ","please skip this","answer"),new RecordingOutput()).conduct(analysis());
   assertEquals(2,calls.get()); assertEquals(1,session.skippedQuestionCount()); assertEquals(60,session.overallScore());
  }
+ @Test void neverAsksAnArtificialFollowUpForACorrectEvaluation() {
+  AtomicInteger calls=new AtomicInteger(); RecordingOutput output=new RecordingOutput();
+  AnswerEvaluator evaluator=request->{calls.incrementAndGet();return new AnswerEvaluation(Verdict.CORRECT,90,"Correct feedback",List.of(),List.of(),Optional.of("This must not be asked."));};
+
+  InterviewSession session=engine(evaluator,new QueueInput("first","second","third"),output).conduct(analysis());
+
+  assertEquals(3,calls.get()); assertTrue(output.followUps.isEmpty()); assertEquals(90,session.overallScore());
+ }
  @Test void retriesBlankAndOverlongAnswersWithoutEvaluation() {
   AtomicInteger calls=new AtomicInteger(); AnswerEvaluator evaluator=req->{calls.incrementAndGet();return correct();}; RecordingOutput output=new RecordingOutput();
   engine(evaluator,new QueueInput(" ","x".repeat(8001),"ok","ok","ok"),output).conduct(analysis());

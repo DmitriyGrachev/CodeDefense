@@ -12,8 +12,10 @@ public final class AnswerEvaluationValidator {
     public AnswerEvaluation validate(Payload payload, AnswerEvaluationRequest request) {
         try {
             Objects.requireNonNull(payload); Objects.requireNonNull(request);
+            Integer score = payload.score();
+            if (score == null) throw invalid();
             Verdict verdict = Verdict.valueOf(payload.verdict());
-            if (verdict == Verdict.SKIPPED || !bandMatches(verdict, payload.score())) throw invalid();
+            if (verdict == Verdict.SKIPPED || !bandMatches(verdict, score)) throw invalid();
             String feedback = bounded(payload.feedback(), 10, 600);
             List<String> understood = concepts(payload.understoodConcepts());
             List<String> missing = concepts(payload.missingConcepts());
@@ -24,7 +26,7 @@ public final class AnswerEvaluationValidator {
             if (followUp == null || followUp.length() > 500 || (verdict == Verdict.CORRECT && !followUp.isEmpty())
                     || normalize(request.primaryQuestion().prompt()).equals(normalize(followUp))
                     || normalize(request.currentPrompt()).equals(normalize(followUp))) throw invalid();
-            return new AnswerEvaluation(verdict, payload.score(), feedback, understood, missing,
+            return new AnswerEvaluation(verdict, score, feedback, understood, missing,
                     followUp.isEmpty() ? Optional.empty() : Optional.of(followUp));
         } catch (InvalidCodexResponseException exception) { throw exception; }
         catch (RuntimeException exception) { throw invalid(); }
@@ -41,6 +43,6 @@ public final class AnswerEvaluationValidator {
     private static String normalize(String value) { return SPACE.matcher(value.strip()).replaceAll(" ").toLowerCase(Locale.ROOT); }
     private static InvalidCodexResponseException invalid() { return new InvalidCodexResponseException(MESSAGE); }
 
-    public record Payload(String verdict, int score, String feedback, List<String> understoodConcepts,
+    public record Payload(String verdict, Integer score, String feedback, List<String> understoodConcepts,
                           List<String> missingConcepts, String followUpQuestion) {}
 }

@@ -32,6 +32,46 @@ class AiAnswerEvaluatorTest {
             assertFalse(error.toString().contains(json));
         }
     }
+    @Test void rejectsMissingNullAndFractionalScoresWithoutLeakingRawJson() {
+        for (String json : new String[] {
+                "{\"verdict\":\"INCORRECT\",\"feedback\":\"Clear repository-specific feedback.\",\"understoodConcepts\":[],\"missingConcepts\":[],\"followUpQuestion\":\"\"}",
+                "{\"verdict\":\"INCORRECT\",\"score\":null,\"feedback\":\"Clear repository-specific feedback.\",\"understoodConcepts\":[],\"missingConcepts\":[],\"followUpQuestion\":\"\"}",
+                "{\"verdict\":\"INCORRECT\",\"score\":12.5,\"feedback\":\"Clear repository-specific feedback.\",\"understoodConcepts\":[],\"missingConcepts\":[],\"followUpQuestion\":\"\"}"
+        }) {
+            AiAnswerEvaluator evaluator = new AiAnswerEvaluator(
+                    request -> new StructuredCodexResult(json, Duration.ZERO, "model"));
+
+            InvalidCodexResponseException error = assertThrows(InvalidCodexResponseException.class,
+                    () -> evaluator.evaluate(AnswerEvaluationPromptFactoryTest.request("project", "answer")));
+
+            assertEquals("Codex returned an invalid answer evaluation.", error.getMessage());
+            assertFalse(error.toString().contains(json));
+        }
+    }
+
+    @Test void acceptsIncorrectScoreZeroAndUsesTheInjectedEvaluationTimeout() {
+        Duration timeout = Duration.ofSeconds(17);
+        AiProvider provider = request -> {
+            assertEquals(timeout, request.timeout());
+            return new StructuredCodexResult(
+                    "{\"verdict\":\"INCORRECT\",\"score\":0,\"feedback\":\"Clear repository-specific feedback.\",\"understoodConcepts\":[],\"missingConcepts\":[],\"followUpQuestion\":\"\"}",
+                    Duration.ZERO,
+                    request.model());
+        };
+
+        AnswerEvaluation evaluation = new AiAnswerEvaluator(
+                provider,
+                new AnswerEvaluationPromptFactory(),
+                new AnswerEvaluationSchemaLoader(),
+                new AnswerEvaluationValidator(),
+                new ObjectMapper(),
+                CodexRuntimeConfig.defaults(),
+                timeout).evaluate(AnswerEvaluationPromptFactoryTest.request("project", "answer"));
+
+        assertEquals(Verdict.INCORRECT, evaluation.verdict());
+        assertEquals(0, evaluation.score());
+    }
+
     @Test void mapsResourceFailuresBeforeProviderInvocationAndPropagatesProviderErrors() {
         AtomicInteger calls = new AtomicInteger();
         AiProvider provider = request -> { calls.incrementAndGet(); throw new CodexTimeoutException(); };

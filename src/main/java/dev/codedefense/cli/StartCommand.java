@@ -7,11 +7,14 @@ import dev.codedefense.ai.exception.CodexNotInstalledException;
 import dev.codedefense.ai.exception.CodexTimeoutException;
 import dev.codedefense.ai.exception.InvalidCodexResponseException;
 import dev.codedefense.analysis.ProjectAnalyzer;
-import dev.codedefense.analysis.ProjectAnalysisRuntimeFactory;
 import dev.codedefense.application.CodeDefenseConfig;
+import dev.codedefense.application.CodeDefenseRuntime;
+import dev.codedefense.application.CodeDefenseRuntimeFactory;
 import dev.codedefense.domain.EmptyProjectSnapshotException;
 import dev.codedefense.domain.ProjectAnalysis;
 import dev.codedefense.domain.ScanSummary;
+import dev.codedefense.interview.InterviewCancelledException;
+import dev.codedefense.interview.InterviewRunner;
 import dev.codedefense.scanner.FileSystemProjectScanner;
 import dev.codedefense.scanner.InvalidProjectPathException;
 import dev.codedefense.scanner.NoSupportedSourceFilesException;
@@ -21,6 +24,8 @@ import dev.codedefense.scanner.ScanPolicy;
 import dev.codedefense.terminal.ConfirmationPrompt;
 import dev.codedefense.terminal.ConsoleConfirmationPrompt;
 import dev.codedefense.terminal.ProjectAnalysisRenderer;
+import dev.codedefense.terminal.ConsoleInterviewOutput;
+import dev.codedefense.terminal.JLineUserInput;
 import java.nio.file.Path;
 import java.util.Objects;
 import picocli.CommandLine.Command;
@@ -38,6 +43,8 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
     private final ProjectSnapshotBuilder snapshotBuilder;
     private final ConfirmationPrompt confirmation;
     private final ProjectAnalyzer analyzer;
+    private final InterviewRunner interviewRunner;
+    private final CodeDefenseRuntimeFactory runtimeFactory;
     private final ProjectAnalysisRenderer analysisRenderer;
 
     @Parameters(index = "0", arity = "0..1", defaultValue = ".", paramLabel = "PATH", description = "Repository path (default: current directory).")
@@ -54,14 +61,13 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
         this(
                 new FileSystemProjectScanner(),
                 new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
-                new ConsoleConfirmationPrompt(),
-                new ProjectAnalysisRuntimeFactory().create(),
-                new ProjectAnalysisRenderer());
+                new ConsoleConfirmationPrompt(), null, new ProjectAnalysisRenderer(), null,
+                new CodeDefenseRuntimeFactory());
     }
 
     StartCommand(ProjectScanner scanner) {
         this(scanner, new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()), prompt -> false,
-                new ProjectAnalysisRuntimeFactory().create(), new ProjectAnalysisRenderer());
+                null, new ProjectAnalysisRenderer(), null, new CodeDefenseRuntimeFactory());
     }
 
     StartCommand(
@@ -70,11 +76,33 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             ConfirmationPrompt confirmation,
             ProjectAnalyzer analyzer,
             ProjectAnalysisRenderer analysisRenderer) {
+        this(scanner, snapshotBuilder, confirmation, analyzer, analysisRenderer, analysis -> null, null);
+    }
+
+    StartCommand(
+            ProjectScanner scanner,
+            ProjectSnapshotBuilder snapshotBuilder,
+            ConfirmationPrompt confirmation,
+            ProjectAnalyzer analyzer,
+            ProjectAnalysisRenderer analysisRenderer,
+            InterviewRunner interviewRunner) {
+        this(scanner, snapshotBuilder, confirmation, analyzer, analysisRenderer, interviewRunner, null);
+    }
+
+    private StartCommand(ProjectScanner scanner, ProjectSnapshotBuilder snapshotBuilder,
+            ConfirmationPrompt confirmation, ProjectAnalyzer analyzer, ProjectAnalysisRenderer analysisRenderer,
+            InterviewRunner interviewRunner, CodeDefenseRuntimeFactory runtimeFactory) {
         this.scanner = Objects.requireNonNull(scanner, "Project scanner");
         this.snapshotBuilder = Objects.requireNonNull(snapshotBuilder, "Project snapshot builder");
         this.confirmation = Objects.requireNonNull(confirmation, "Confirmation prompt");
-        this.analyzer = Objects.requireNonNull(analyzer, "Project analyzer");
+        this.analyzer = analyzer;
         this.analysisRenderer = Objects.requireNonNull(analysisRenderer, "Project analysis renderer");
+        this.interviewRunner = interviewRunner;
+        this.runtimeFactory = runtimeFactory;
+        if (runtimeFactory == null) {
+            Objects.requireNonNull(analyzer, "Project analyzer");
+            Objects.requireNonNull(interviewRunner, "Interview runner");
+        }
     }
 
     public Path path() {
@@ -98,9 +126,18 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             String prompt = "Send selected snapshot to Codex? [y/N]";
             if (!yes) commandSpec.commandLine().getOut().println(prompt);
             if (!yes && !confirmation.confirm(prompt)) { commandSpec.commandLine().getOut().println("Cancelled before any source content was sent."); return ExitCodes.SUCCESS; }
+            ProjectAnalyzer activeAnalyzer = analyzer;
+            InterviewRunner activeInterviewRunner = interviewRunner;
+            if (runtimeFactory != null) {
+                CodeDefenseRuntime runtime = runtimeFactory.create(
+                        new JLineUserInput(), new ConsoleInterviewOutput(commandSpec.commandLine().getOut()));
+                activeAnalyzer = runtime.analyzer();
+                activeInterviewRunner = runtime.interviewRunner();
+            }
             commandSpec.commandLine().getOut().println("Analyzing project with GPT-5.6...");
-            ProjectAnalysis analysis = analyzer.analyze(snapshot);
+            ProjectAnalysis analysis = activeAnalyzer.analyze(snapshot);
             analysisRenderer.render(analysis, commandSpec.commandLine().getOut());
+            activeInterviewRunner.conduct(analysis);
             return ExitCodes.SUCCESS;
         } catch (InvalidProjectPathException exception) {
             commandSpec.commandLine().getErr().println(exception.getMessage());
@@ -125,6 +162,9 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             return ExitCodes.CODEX_EXECUTION_FAILED;
         } catch (CodexInterruptedException exception) {
             Thread.currentThread().interrupt();
+            commandSpec.commandLine().getErr().println(exception.getMessage());
+            return ExitCodes.CANCELLED;
+        } catch (InterviewCancelledException exception) {
             commandSpec.commandLine().getErr().println(exception.getMessage());
             return ExitCodes.CANCELLED;
         }

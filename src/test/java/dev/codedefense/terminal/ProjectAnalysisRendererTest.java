@@ -28,7 +28,7 @@ class ProjectAnalysisRendererTest {
         assertTrue(rendered.contains("Critical topics\n- startup\n- validation"));
         assertTrue(rendered.contains("Prepared technical questions: 3"));
         assertTrue(rendered.contains("Project analysis completed."));
-        assertTrue(rendered.contains("The adaptive defense will be connected in Iteration 6."));
+        assertFalse(rendered.contains("The adaptive defense will be connected in Iteration 6."));
     }
 
     @Test

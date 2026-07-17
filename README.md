@@ -27,9 +27,11 @@ java -jar target/codedefense.jar start . --dry-run
 java -jar target/codedefense.jar start . --yes
 ```
 
-`--dry-run` scans and previews the bounded snapshot without sending source content, invoking Codex, or consuming credits. Starting with Iteration 5, `--yes` bypasses confirmation and performs one real structured project-analysis request through the locally authenticated Codex CLI. That request consumes Codex credits.
+`--dry-run` scans and previews the bounded snapshot without sending source content, invoking Codex, initializing the interactive terminal, or consuming credits. `--yes` bypasses confirmation and starts the structured analysis and interview through the locally authenticated Codex CLI. These requests consume Codex credits.
 
-The Iteration 5 overview includes the project summary, main flow, key components, critical topics, and the count of prepared technical questions. Exactly three repository-specific questions are prepared for the later adaptive-defense workflow. Their prompts and internal expected answers are not displayed yet.
+The interactive defense asks exactly three repository-specific primary questions and may ask at most one focused follow-up for each. Entering exactly `skip` (case-insensitively) skips that turn locally without an evaluation request. Blank or overlong answers are rejected locally. Ctrl+C or end-of-input cancels safely with no report generated.
+
+Codex evaluates answer quality, but CodeDefense computes question scores, the rounded overall score, skipped-primary count, and readiness classification locally. A complete run makes at most seven model requests: one project analysis and up to six answer evaluations. Question prompts and evidence locations are displayed; internal expected key points, evidence reasons, raw model JSON, and model internals are not. Iteration 6 keeps the completed session only in memory—report generation and persistence remain deferred to Iteration 7.
 
 ## Privacy model
 
@@ -59,6 +61,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0-3 provide the executable CLI, deterministic local discovery, and privacy-aware bounded snapshots. Iteration 4 provides Codex preflight, safe structured process execution, and the opt-in live smoke test. Iteration 5 adds one structured project-analysis request and a safe terminal overview; interactive questioning, answer evaluation, and reports remain out of scope until later iterations.
+Iterations 0-3 provide the executable CLI, deterministic local discovery, and privacy-aware bounded snapshots. Iteration 4 provides Codex preflight, safe structured process execution, and the opt-in live smoke test. Iteration 5 adds structured project analysis and a safe terminal overview. Iteration 6 adds the adaptive three-question interview, bounded answer evaluation, and local scoring; persisted reports remain out of scope until Iteration 7.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

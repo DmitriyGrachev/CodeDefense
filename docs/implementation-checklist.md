@@ -6,7 +6,7 @@
 - [x] Iteration 3 — prioritization, redaction, and bounded snapshots.
 - [x] Iteration 4 — Codex environment checking and process adapter.
 - [x] Iteration 5 — project analysis and terminal overview.
-- [ ] Iteration 6 — adaptive three-question interview.
+- [x] Iteration 6 — adaptive three-question interview.
 - [ ] Iteration 7 — Markdown reports and report command.
 - [ ] Iteration 8 — embedded sample project.
 - [ ] Iteration 9 — reliability, release documentation, and submission readiness.

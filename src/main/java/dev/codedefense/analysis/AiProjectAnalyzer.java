@@ -29,7 +29,7 @@ public final class AiProjectAnalyzer implements ProjectAnalyzer {
                 new ProjectAnalysisValidator(), new ObjectMapper(), CodexRuntimeConfig.defaults());
     }
 
-    AiProjectAnalyzer(
+    public AiProjectAnalyzer(
             AiProvider aiProvider,
             ProjectAnalysisPromptFactory promptFactory,
             ProjectAnalysisSchemaLoader schemaLoader,

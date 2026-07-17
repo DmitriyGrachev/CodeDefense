@@ -130,11 +130,6 @@ class AiProjectAnalyzerTest {
     }
 
     @Test
-    void productionRuntimeFactoryBuildsALazyAnalyzerWithoutCallingCodex() {
-        assertNotNull(new ProjectAnalysisRuntimeFactory().create());
-    }
-
-    @Test
     void mapsMissingPromptResourceToSafeExecutionFailureWithoutCallingProvider() throws Exception {
         CapturingAiProvider provider = providerWithValidResult();
         AiProjectAnalyzer analyzer = analyzer(

@@ -50,30 +50,13 @@ class UnderstandingReportServiceTest {
     }
 
     @Test
-    void propagatesNonAvailabilityCodexFailuresWithoutSaving() {
+    void usesFallbackAndStoresOnceForEveryExpectedNonCancellationCodexFailure() {
         ReportGenerationRequest request = Fixtures.request();
         for (RuntimeException failure : new RuntimeException[] {
-                new CodexTimeoutException(), new CodexExecutionException(1, "failed"),
-                new InvalidCodexResponseException("invalid") }) {
-            CapturingGenerator generator = new CapturingGenerator(failure);
-            CapturingStore store = new CapturingStore();
-
-            assertThrows(failure.getClass(),
-                    () -> service(generator, store).generateAndSave(snapshot(), request.analysis(), request.session()));
-
-            assertEquals(1, generator.calls);
-            assertEquals(0, store.calls);
+                new CodexNotInstalledException(), new CodexNotAuthenticatedException(), new CodexTimeoutException(),
+                new CodexExecutionException(1, "failed"), new InvalidCodexResponseException("invalid") }) {
+            assertFallback(request, failure);
         }
-    }
-
-    @Test
-    void usesFallbackAndStoresOnceWhenCodexIsNotInstalled() {
-        assertFallback(Fixtures.request(), new CodexNotInstalledException());
-    }
-
-    @Test
-    void usesFallbackAndStoresOnceWhenCodexIsNotAuthenticated() {
-        assertFallback(Fixtures.request(), new CodexNotAuthenticatedException());
     }
 
     @Test

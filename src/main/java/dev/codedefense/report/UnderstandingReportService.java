@@ -1,7 +1,10 @@
 package dev.codedefense.report;
 
+import dev.codedefense.ai.exception.CodexExecutionException;
 import dev.codedefense.ai.exception.CodexNotAuthenticatedException;
 import dev.codedefense.ai.exception.CodexNotInstalledException;
+import dev.codedefense.ai.exception.CodexTimeoutException;
+import dev.codedefense.ai.exception.InvalidCodexResponseException;
 import dev.codedefense.domain.FinalReport;
 import dev.codedefense.domain.InterviewSession;
 import dev.codedefense.domain.NarrativeSource;
@@ -48,7 +51,11 @@ public final class UnderstandingReportService implements ReportService {
         try {
             narrative = narrativeGenerator.generate(request, metadata);
             source = NarrativeSource.AI;
-        } catch (CodexNotInstalledException | CodexNotAuthenticatedException exception) {
+        } catch (CodexNotInstalledException
+                | CodexNotAuthenticatedException
+                | CodexTimeoutException
+                | CodexExecutionException
+                | InvalidCodexResponseException exception) {
             narrative = fallbackFactory.create(request);
             source = NarrativeSource.DETERMINISTIC_FALLBACK;
         }

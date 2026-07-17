@@ -15,6 +15,8 @@ import dev.codedefense.domain.ProjectAnalysis;
 import dev.codedefense.domain.ScanSummary;
 import dev.codedefense.interview.InterviewCancelledException;
 import dev.codedefense.interview.InterviewRunner;
+import dev.codedefense.report.ReportPersistenceException;
+import dev.codedefense.report.ReportService;
 import dev.codedefense.scanner.FileSystemProjectScanner;
 import dev.codedefense.scanner.InvalidProjectPathException;
 import dev.codedefense.scanner.NoSupportedSourceFilesException;
@@ -26,6 +28,7 @@ import dev.codedefense.terminal.ConsoleConfirmationPrompt;
 import dev.codedefense.terminal.ProjectAnalysisRenderer;
 import dev.codedefense.terminal.ConsoleInterviewOutput;
 import dev.codedefense.terminal.JLineUserInput;
+import dev.codedefense.terminal.TerminalTextSanitizer;
 import java.nio.file.Path;
 import java.util.Objects;
 import picocli.CommandLine.Command;
@@ -46,6 +49,7 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
     private final InterviewRunner interviewRunner;
     private final CodeDefenseRuntimeFactory runtimeFactory;
     private final ProjectAnalysisRenderer analysisRenderer;
+    private final ReportService reportService;
 
     @Parameters(index = "0", arity = "0..1", defaultValue = ".", paramLabel = "PATH", description = "Repository path (default: current directory).")
     private Path path;
@@ -76,7 +80,7 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             ConfirmationPrompt confirmation,
             ProjectAnalyzer analyzer,
             ProjectAnalysisRenderer analysisRenderer) {
-        this(scanner, snapshotBuilder, confirmation, analyzer, analysisRenderer, analysis -> null, null);
+        this(scanner, snapshotBuilder, confirmation, analyzer, analysisRenderer, analysis -> null, null, null);
     }
 
     StartCommand(
@@ -86,12 +90,29 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             ProjectAnalyzer analyzer,
             ProjectAnalysisRenderer analysisRenderer,
             InterviewRunner interviewRunner) {
-        this(scanner, snapshotBuilder, confirmation, analyzer, analysisRenderer, interviewRunner, null);
+        this(scanner, snapshotBuilder, confirmation, analyzer, analysisRenderer, interviewRunner, null, null);
+    }
+
+    StartCommand(
+            ProjectScanner scanner,
+            ProjectSnapshotBuilder snapshotBuilder,
+            ConfirmationPrompt confirmation,
+            ProjectAnalyzer analyzer,
+            ProjectAnalysisRenderer analysisRenderer,
+            InterviewRunner interviewRunner,
+            ReportService reportService) {
+        this(scanner, snapshotBuilder, confirmation, analyzer, analysisRenderer, interviewRunner, null, reportService);
     }
 
     private StartCommand(ProjectScanner scanner, ProjectSnapshotBuilder snapshotBuilder,
             ConfirmationPrompt confirmation, ProjectAnalyzer analyzer, ProjectAnalysisRenderer analysisRenderer,
             InterviewRunner interviewRunner, CodeDefenseRuntimeFactory runtimeFactory) {
+        this(scanner, snapshotBuilder, confirmation, analyzer, analysisRenderer, interviewRunner, runtimeFactory, null);
+    }
+
+    private StartCommand(ProjectScanner scanner, ProjectSnapshotBuilder snapshotBuilder,
+            ConfirmationPrompt confirmation, ProjectAnalyzer analyzer, ProjectAnalysisRenderer analysisRenderer,
+            InterviewRunner interviewRunner, CodeDefenseRuntimeFactory runtimeFactory, ReportService reportService) {
         this.scanner = Objects.requireNonNull(scanner, "Project scanner");
         this.snapshotBuilder = Objects.requireNonNull(snapshotBuilder, "Project snapshot builder");
         this.confirmation = Objects.requireNonNull(confirmation, "Confirmation prompt");
@@ -99,6 +120,7 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
         this.analysisRenderer = Objects.requireNonNull(analysisRenderer, "Project analysis renderer");
         this.interviewRunner = interviewRunner;
         this.runtimeFactory = runtimeFactory;
+        this.reportService = reportService;
         if (runtimeFactory == null) {
             Objects.requireNonNull(analyzer, "Project analyzer");
             Objects.requireNonNull(interviewRunner, "Interview runner");
@@ -128,16 +150,27 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
             if (!yes && !confirmation.confirm(prompt)) { commandSpec.commandLine().getOut().println("Cancelled before any source content was sent."); return ExitCodes.SUCCESS; }
             ProjectAnalyzer activeAnalyzer = analyzer;
             InterviewRunner activeInterviewRunner = interviewRunner;
+            ReportService activeReportService = reportService;
             if (runtimeFactory != null) {
                 CodeDefenseRuntime runtime = runtimeFactory.create(
                         new JLineUserInput(), new ConsoleInterviewOutput(commandSpec.commandLine().getOut()));
                 activeAnalyzer = runtime.analyzer();
                 activeInterviewRunner = runtime.interviewRunner();
+                activeReportService = runtime.reportService();
             }
             commandSpec.commandLine().getOut().println("Analyzing project with GPT-5.6...");
             ProjectAnalysis analysis = activeAnalyzer.analyze(snapshot);
             analysisRenderer.render(analysis, commandSpec.commandLine().getOut());
-            activeInterviewRunner.conduct(analysis);
+            var session = activeInterviewRunner.conduct(analysis);
+            if (activeReportService != null && session != null) {
+                commandSpec.commandLine().getOut().println("Generating understanding report...");
+                var savedReport = activeReportService.generateAndSave(snapshot, analysis, session);
+                if (savedReport.narrativeSource() == dev.codedefense.domain.NarrativeSource.DETERMINISTIC_FALLBACK) {
+                    commandSpec.commandLine().getOut().println("Codex report narrative was unavailable; saved a deterministic fallback report.");
+                }
+                commandSpec.commandLine().getOut().println("Understanding report saved: "
+                        + TerminalTextSanitizer.singleLine(savedReport.path().toString()));
+            }
             return ExitCodes.SUCCESS;
         } catch (InvalidProjectPathException exception) {
             commandSpec.commandLine().getErr().println(exception.getMessage());
@@ -167,6 +200,9 @@ public final class StartCommand implements java.util.concurrent.Callable<Integer
         } catch (InterviewCancelledException exception) {
             commandSpec.commandLine().getErr().println(exception.getMessage());
             return ExitCodes.CANCELLED;
+        } catch (ReportPersistenceException exception) {
+            commandSpec.commandLine().getErr().println(exception.getMessage());
+            return ExitCodes.REPORT_PERSISTENCE_FAILED;
         }
     }
 

@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
@@ -119,10 +120,11 @@ public final class JdkProcessExecutor implements ProcessExecutor {
         try {
             terminate(process, gracePeriod);
         } finally {
-            closeStreams(process);
+            List<Thread> streamClosers = closeStreams(process);
             inputTask.cancel();
             stdoutTask.cancel();
             stderrTask.cancel();
+            awaitCleanup(gracePeriod, streamClosers, inputTask, stdoutTask, stderrTask);
         }
     }
 
@@ -137,20 +139,43 @@ public final class JdkProcessExecutor implements ProcessExecutor {
         }
     }
 
-    private static void closeStreams(Process process) {
-        closeAsync(process.getOutputStream());
-        closeAsync(process.getInputStream());
-        closeAsync(process.getErrorStream());
+    private static List<Thread> closeStreams(Process process) {
+        return List.of(
+                closeAsync(process.getOutputStream()),
+                closeAsync(process.getInputStream()),
+                closeAsync(process.getErrorStream()));
     }
 
-    private static void closeAsync(AutoCloseable closeable) {
-        Thread.ofVirtual().start(() -> close(closeable));
+    private static Thread closeAsync(AutoCloseable closeable) {
+        return Thread.ofVirtual().start(() -> close(closeable));
     }
 
     private static void close(AutoCloseable closeable) {
         try {
             closeable.close();
         } catch (Exception ignored) {
+        }
+    }
+
+    private static void awaitCleanup(
+            Duration gracePeriod,
+            List<Thread> streamClosers,
+            ProcessTask<?> inputTask,
+            ProcessTask<?> stdoutTask,
+            ProcessTask<?> stderrTask) throws InterruptedException {
+        long deadlineNanos = System.nanoTime() + gracePeriod.toNanos();
+        for (Thread thread : streamClosers) {
+            joinUntil(thread, deadlineNanos);
+        }
+        joinUntil(inputTask.thread(), deadlineNanos);
+        joinUntil(stdoutTask.thread(), deadlineNanos);
+        joinUntil(stderrTask.thread(), deadlineNanos);
+    }
+
+    private static void joinUntil(Thread thread, long deadlineNanos) throws InterruptedException {
+        long remainingNanos = remainingNanos(deadlineNanos);
+        if (remainingNanos > 0 && thread.isAlive()) {
+            thread.join(Duration.ofNanos(remainingNanos));
         }
     }
 

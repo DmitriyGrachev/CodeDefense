@@ -24,14 +24,40 @@ mvn clean verify
 mvn package
 java -jar target/codedefense.jar --help
 java -jar target/codedefense.jar start . --dry-run
-java -jar target/codedefense.jar start . --yes
+java -jar target/codedefense.jar report
 ```
 
 `--dry-run` scans and previews the bounded snapshot without sending source content, invoking Codex, initializing the interactive terminal, or consuming credits. `--yes` bypasses confirmation and starts the structured analysis and interview through the locally authenticated Codex CLI. These requests consume Codex credits.
 
 The interactive defense asks exactly three repository-specific primary questions and may ask at most one focused follow-up for each. Entering exactly `skip` (case-insensitively) skips that turn locally without an evaluation request. Blank or overlong answers are rejected locally. Ctrl+C or end-of-input cancels safely with no report generated.
 
-Codex evaluates answer quality, but CodeDefense computes question scores, the rounded overall score, skipped-primary count, and readiness classification locally. A complete run makes at most seven model requests: one project analysis and up to six answer evaluations. Question prompts and evidence locations are displayed; internal expected key points, evidence reasons, raw model JSON, and model internals are not. Iteration 6 keeps the completed session only in memory—report generation and persistence remain deferred to Iteration 7.
+Codex evaluates answer quality, but CodeDefense computes question scores, the rounded overall score, skipped-primary count, and readiness classification locally. Those local values are authoritative: the report narrative cannot replace or alter them. A complete run makes at most eight model requests: one project analysis, up to six answer evaluations, and one report-narrative request. Question prompts and evidence locations are displayed; internal expected key points, evidence reasons, raw model JSON, and model internals are not.
+
+## Understanding reports
+
+After a successful analysis and completed interview, CodeDefense creates an Understanding Report in Markdown. It writes reports beneath the current user's home directory at:
+
+```text
+<user.home>/.codedefense/reports/
+```
+
+The file `<user.home>/.codedefense/latest-report.txt` is a local pointer to the most recently saved report. Run the following to print that report:
+
+```powershell
+java -jar target/codedefense.jar report
+```
+
+`report` is local-only: it does not invoke Codex and does not initialize JLine. If no completed report is available, it prints a safe explanatory message and exits successfully. Corrupt, unreadable, or unsafe report persistence data is reported safely with exit code `9`.
+
+Report generation sends only the bounded report payload needed for the narrative: validated project metadata and overview, question prompts, evaluation concepts, and local scores/readiness. It does not send repository source or snapshots, user answers, expected key points, evidence metadata or reasons, prompt templates, schemas, or raw model JSON. The saved Markdown report includes answers only in escaped text fences; it never includes the source snapshot, expected key points, evidence reasons, raw model JSON, templates, schemas, or temporary paths.
+
+If the report-narrative request fails for any non-cancellation Codex error, CodeDefense still creates and saves a deterministic local fallback report. Cancellation is preserved and no report is generated. A persistence failure also exits with code `9`.
+
+For PowerShell scripts that read a report file, use explicit UTF-8 decoding:
+
+```powershell
+Get-Content -LiteralPath "$HOME\.codedefense\latest-report.txt" -Encoding utf8
+```
 
 ## Privacy model
 
@@ -61,6 +87,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0-3 provide the executable CLI, deterministic local discovery, and privacy-aware bounded snapshots. Iteration 4 provides Codex preflight, safe structured process execution, and the opt-in live smoke test. Iteration 5 adds structured project analysis and a safe terminal overview. Iteration 6 adds the adaptive three-question interview, bounded answer evaluation, and local scoring; persisted reports remain out of scope until Iteration 7.
+Iterations 0-3 provide the executable CLI, deterministic local discovery, and privacy-aware bounded snapshots. Iteration 4 provides Codex preflight, safe structured process execution, and the opt-in live smoke test. Iteration 5 adds structured project analysis and a safe terminal overview. Iteration 6 adds the adaptive three-question interview and local scoring. Iteration 7 adds Markdown Understanding Reports, local report persistence, deterministic fallback, and the `report` command. Iteration 8 (the embedded sample project) is future work and is not implemented yet.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

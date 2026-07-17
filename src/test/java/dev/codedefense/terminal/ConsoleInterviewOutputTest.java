@@ -16,8 +16,8 @@ class ConsoleInterviewOutputTest {
   for(String expected:List.of(
           "Technical defense completed.","Question scores","1. 74/100","2. 90/100","3. 0/100",
           "Overall score: 55/100","Readiness: Review needed",
-          "Educational signal only. This is not approval to merge or deploy.",
-          "Report generation will be connected in Iteration 7.")) assertTrue(summary.contains(expected),expected);
+           "Educational signal only. This is not approval to merge or deploy.")) assertTrue(summary.contains(expected),expected);
+  assertFalse(summary.contains("Report generation will be connected in Iteration 7."));
   for(String privateMarker:List.of("ANSWER_ONE","ANSWER_TWO","ANSWER_THREE","PROMPT_ONE","PROMPT_TWO",
           "PROMPT_THREE","KEY_ONE","KEY_TWO","KEY_THREE","FEEDBACK_ONE","FEEDBACK_TWO","FEEDBACK_THREE",
           "REASON_ONE","REASON_TWO","REASON_THREE")) assertFalse(summary.contains(privateMarker),privateMarker);
@@ -63,7 +63,8 @@ class ConsoleInterviewOutputTest {
   InterviewSession session=new InterviewSession("demo",List.of(r,new QuestionResult(2,q,turn,Optional.empty(),60),new QuestionResult(3,q,turn,Optional.empty(),60)),60,Readiness.REVIEW_NEEDED,0);
   out.renderIntroduction(3); out.renderPrimaryQuestion(1,3,q); out.renderEvaluating(); out.renderEvaluation(e); out.renderFollowUp("What fails?"); out.renderSkipped(false); out.renderQuestionScore(1,60); out.renderSummary(session);
   String text=sink.toString();
-  for(String expected:List.of("3","src/App.java:2-4","Explain flow?","Useful feedback","entrypoint","failure path","60","Review needed","Report generation will be connected in Iteration 7.")) assertTrue(text.contains(expected),expected);
+  for(String expected:List.of("3","src/App.java:2-4","Explain flow?","Useful feedback","entrypoint","failure path","60","Review needed","Educational signal only. This is not approval to merge or deploy.")) assertTrue(text.contains(expected),expected);
+  assertFalse(text.contains("Report generation will be connected in Iteration 7."));
   for(String secret:List.of("GOAL_SECRET","KEY_SECRET","OTHER_SECRET","REASON_SECRET","ANSWER_SECRET","\u001b")) assertFalse(text.contains(secret),secret);
  }
 

@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.codedefense.analysis.ProjectAnalyzer;
 import dev.codedefense.application.CodeDefenseConfig;
+import dev.codedefense.application.CodeDefenseRuntime;
+import dev.codedefense.application.DefaultProjectDefenseRunner;
 import dev.codedefense.domain.CodeEvidence;
 import dev.codedefense.domain.InterviewSession;
 import dev.codedefense.domain.NarrativeSource;
@@ -152,15 +154,19 @@ class StartCommandReportTest {
         Files.writeString(file, "class App {}");
         long fileSize = Files.size(file);
         ProjectScanner scanner = (path, policy) -> new ScanSummary(root, 1, 0, List.of(new SourceFile(Path.of("App.java"), fileSize)));
-        CommandLine line = new CommandLine(new StartCommand(scanner, new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
-                prompt -> confirmation, analyzer, new ProjectAnalysisRenderer(), runner, reports));
+        var workflow = new DefaultProjectDefenseRunner(scanner, new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
+                prompt -> confirmation, new ProjectAnalysisRenderer(),
+                ignored -> new CodeDefenseRuntime(analyzer, runner, reports));
+        CommandLine line = new CommandLine(new StartCommand(workflow));
         line.setOut(new PrintWriter(output, true, StandardCharsets.UTF_8));
         return line;
     }
 
     private CommandLine commandLine(ProjectScanner scanner, ProjectAnalyzer analyzer, InterviewRunner runner, ReportService reports) {
-        CommandLine line = new CommandLine(new StartCommand(scanner, new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
-                prompt -> true, analyzer, new ProjectAnalysisRenderer(), runner, reports));
+        var workflow = new DefaultProjectDefenseRunner(scanner, new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
+                prompt -> true, new ProjectAnalysisRenderer(),
+                ignored -> new CodeDefenseRuntime(analyzer, runner, reports));
+        CommandLine line = new CommandLine(new StartCommand(workflow));
         line.setOut(new PrintWriter(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8));
         return line;
     }

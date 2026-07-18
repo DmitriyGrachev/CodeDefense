@@ -3,8 +3,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.codedefense.ai.*; import dev.codedefense.analysis.*; import dev.codedefense.interview.*; import dev.codedefense.terminal.*;
 import dev.codedefense.report.*;
 import java.nio.file.Path;
+import java.io.PrintWriter;
 import java.time.Clock;
-public final class CodeDefenseRuntimeFactory {
+public final class CodeDefenseRuntimeFactory implements CodeDefenseRuntimeProvider {
+ @Override public CodeDefenseRuntime create(PrintWriter output){
+  return create(new JLineUserInput(),new ConsoleInterviewOutput(output));
+ }
  public CodeDefenseRuntime create(UserInput input,InterviewOutput output){
   CodexRuntimeConfig config=CodexRuntimeConfig.defaults();JdkProcessExecutor executor=new JdkProcessExecutor();CodexProcessEnvironment environment=new CodexProcessEnvironment();ObjectMapper mapper=new ObjectMapper();
   CodexProcessRunner runner=new CodexProcessRunner(executor,new CodexCommandFactory(),environment,config,mapper,CodexTemporaryWorkspace::create,System.getenv());

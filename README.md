@@ -24,10 +24,25 @@ mvn clean verify
 mvn package
 java -jar target/codedefense.jar --help
 java -jar target/codedefense.jar start . --dry-run
+java -jar target/codedefense.jar sample --dry-run
 java -jar target/codedefense.jar report
 ```
 
 `--dry-run` scans and previews the bounded snapshot without sending source content, invoking Codex, initializing the interactive terminal, or consuming credits. `--yes` bypasses confirmation and starts the structured analysis and interview through the locally authenticated Codex CLI. These requests consume Codex credits.
+
+## Embedded sample project
+
+Use the built-in sample to explore the complete workflow without selecting a repository path:
+
+```powershell
+java -jar target/codedefense.jar sample --dry-run
+java -jar target/codedefense.jar sample
+java -jar target/codedefense.jar sample --yes
+```
+
+`sample --dry-run` extracts the built-in project into a temporary directory, uses the same scanner and bounded snapshot preview as `start`, then removes that directory. It does not send source content, initialize JLine, invoke Codex, consume credits, or create a report. `sample` retains the normal preview and confirmation; `sample --yes` bypasses only that confirmation and can consume Codex credits. Both normal modes require the locally installed and authenticated Codex CLI described above.
+
+The sample uses the same analysis, interview, and report pipeline as a local project. It is handled only as text: CodeDefense does not compile or execute any sample source. After any terminal path, its extracted workspace is removed. A completed normal run stores its report in the regular local report location, not beside the temporary sample.
 
 The interactive defense asks exactly three repository-specific primary questions and may ask at most one focused follow-up for each. Entering exactly `skip` (case-insensitively) skips that turn locally without an evaluation request. Blank or overlong answers are rejected locally. Ctrl+C or end-of-input cancels safely with no report generated.
 
@@ -87,6 +102,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0-3 provide the executable CLI, deterministic local discovery, and privacy-aware bounded snapshots. Iteration 4 provides Codex preflight, safe structured process execution, and the opt-in live smoke test. Iteration 5 adds structured project analysis and a safe terminal overview. Iteration 6 adds the adaptive three-question interview and local scoring. Iteration 7 adds Markdown Understanding Reports, local report persistence, deterministic fallback, and the `report` command. Iteration 8 (the embedded sample project) is future work and is not implemented yet.
+Iterations 0-3 provide the executable CLI, deterministic local discovery, and privacy-aware bounded snapshots. Iteration 4 provides Codex preflight, safe structured process execution, and the opt-in live smoke test. Iteration 5 adds structured project analysis and a safe terminal overview. Iteration 6 adds the adaptive three-question interview and local scoring. Iteration 7 adds Markdown Understanding Reports, local report persistence, deterministic fallback, and the `report` command. Iteration 8 adds the embedded sample project and shared `start`/`sample` workflow. Real acceptance is still required before the Iteration 8 checklist item is marked complete. Iteration 9 remains future work.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

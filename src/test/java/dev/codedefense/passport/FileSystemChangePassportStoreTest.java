@@ -90,21 +90,37 @@ class FileSystemChangePassportStoreTest {
     }
 
     @Test
-    void collisionNamingAndAtomicMoveFallbackAreSafe() {
+    void artifactMoveAttemptsAtomicMove() {
         ChangePassportPaths paths = ChangePassportPaths.under(directory);
-        Clock fixed = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
-        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
-        FileSystemChangePassportStore store = new FileSystemChangePassportStore(paths, new MarkdownChangePassportRenderer(), fixed,
+        java.util.concurrent.atomic.AtomicReference<java.nio.file.CopyOption[]> artifactOptions = new java.util.concurrent.atomic.AtomicReference<>();
+        FileSystemChangePassportStore store = new FileSystemChangePassportStore(paths, new MarkdownChangePassportRenderer(),
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
                 (source, target, options) -> {
-                    if (options.length > 0 && attempts.getAndIncrement() == 1) throw new AtomicMoveNotSupportedException(source.toString(), target.toString(), "test");
-                    attempts.incrementAndGet();
+                    if (target.getFileName().toString().endsWith(".md")) artifactOptions.set(options.clone());
                     Files.move(source, target, options);
                 });
-        Path first = store.save(PassportTestFixtures.passport(dev.codedefense.domain.PassportStatus.CURRENT));
-        Path second = store.save(PassportTestFixtures.passport(dev.codedefense.domain.PassportStatus.CURRENT));
-        assertTrue(attempts.get() >= 3);
-        assertFalse(first.equals(second));
-        assertTrue(second.getFileName().toString().contains("-2.md"));
+        store.save(PassportTestFixtures.passport(dev.codedefense.domain.PassportStatus.CURRENT));
+        assertTrue(java.util.Arrays.asList(artifactOptions.get()).contains(StandardCopyOption.ATOMIC_MOVE));
+    }
+
+    @Test
+    void artifactMoveFallsBackWhenAtomicMoveIsUnsupported() {
+        ChangePassportPaths paths = ChangePassportPaths.under(directory);
+        java.util.concurrent.atomic.AtomicBoolean rejectedAtomicArtifactMove = new java.util.concurrent.atomic.AtomicBoolean();
+        FileSystemChangePassportStore store = new FileSystemChangePassportStore(paths, new MarkdownChangePassportRenderer(),
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), (source, target, options) -> {
+                    if (target.getFileName().toString().endsWith(".md")
+                            && java.util.Arrays.asList(options).contains(StandardCopyOption.ATOMIC_MOVE)
+                            && rejectedAtomicArtifactMove.compareAndSet(false, true)) {
+                        throw new AtomicMoveNotSupportedException(source.toString(), target.toString(), "test");
+                    }
+                    Files.move(source, target, options);
+                });
+
+        Path saved = store.save(PassportTestFixtures.passport(dev.codedefense.domain.PassportStatus.CURRENT));
+
+        assertTrue(rejectedAtomicArtifactMove.get());
+        assertTrue(Files.isRegularFile(saved));
     }
 
     @Test

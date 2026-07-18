@@ -164,7 +164,7 @@ class StagedChangeDefenseRunnerTest {
         StagedChange change = new StagedChange(root, "a".repeat(64), "b".repeat(40), "c".repeat(40),
                 "d".repeat(64), List.of(file), 1, 0);
         return new CapturedStagedChange(change,
-                List.of(new IndexBlob(file, Optional.of("class App {}\n"), false, Optional.empty(), false)), "diff");
+                List.of(new IndexBlob(file, Optional.of("class App {}\n"), false, Optional.empty(), false)));
     }
 
     private CapturedStagedChange emptyCaptured(Path ignored) {
@@ -173,6 +173,6 @@ class StagedChangeDefenseRunnerTest {
         StagedChange change = new StagedChange(root, "a".repeat(64), "b".repeat(40), "c".repeat(40),
                 "d".repeat(64), List.of(file), 1, 0);
         return new CapturedStagedChange(change,
-                List.of(new IndexBlob(file, Optional.of("not source"), false, Optional.empty(), false)), "diff");
+                List.of(new IndexBlob(file, Optional.of("not source"), false, Optional.empty(), false)));
     }
 }

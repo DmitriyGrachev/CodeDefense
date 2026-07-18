@@ -30,8 +30,7 @@ class StagedChangeContextBuilderTest {
                         "password=TOPSECRET\npublic class Main { String text = \"staged\"; }\n",
                         "public class Main { String text = \"base\"; }\n"),
                 blob("README.md", StagedFileStatus.ADDED, "# Staged README\n", null),
-                blob("src/Deleted.java", StagedFileStatus.DELETED, null, "class Deleted {}\n")),
-                "diff --git a/src/Main.java b/src/Main.java\n+index 111..222 100644\n");
+                blob("src/Deleted.java", StagedFileStatus.DELETED, null, "class Deleted {}\n")));
 
         ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
                 .build(captured);
@@ -58,7 +57,7 @@ class StagedChangeContextBuilderTest {
                             + "x".repeat(200) + "\"; }\n", null));
         }
         CodeDefenseConfig config = new CodeDefenseConfig(30, 10_000, 180);
-        ProjectSnapshot snapshot = new StagedChangeContextBuilder(config).build(captured(blobs, "diff\n"));
+        ProjectSnapshot snapshot = new StagedChangeContextBuilder(config).build(captured(blobs));
 
         assertEquals(30, snapshot.selectedFiles().size());
         assertEquals(snapshot.selectedFiles().stream().map(ProjectSnapshot.SelectedFile::relativePath).sorted().toList(),
@@ -74,7 +73,7 @@ class StagedChangeContextBuilderTest {
     void rejectsChangeWithNoEligibleCurrentStagedText() {
         CapturedStagedChange captured = captured(List.of(
                 blob("src/Deleted.java", StagedFileStatus.DELETED, null, "class Deleted {}\n"),
-                blob("private.key", StagedFileStatus.ADDED, "secret", null)), "diff\n");
+                blob("private.key", StagedFileStatus.ADDED, "secret", null)));
 
         assertThrows(EmptyProjectSnapshotException.class,
                 () -> new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024)).build(captured));
@@ -84,8 +83,7 @@ class StagedChangeContextBuilderTest {
     void rendersOnlySafeStagedChangePreviewMetadata() {
         CapturedStagedChange captured = captured(List.of(
                 blob("src/Main.java", StagedFileStatus.MODIFIED, "class Main {}\n", "class Base {}\n"),
-                blob("src/Old.java", StagedFileStatus.DELETED, null, "class Old {}\n")),
-                "private staged diff");
+                blob("src/Old.java", StagedFileStatus.DELETED, null, "class Old {}\n")));
         ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
                 .build(captured);
         StringWriter text = new StringWriter();
@@ -97,7 +95,6 @@ class StagedChangeContextBuilderTest {
         assertTrue(text.toString().contains("Unstaged working-tree content ignored: yes"));
         assertTrue(text.toString().contains("Selected-file limit: 30"));
         assertTrue(text.toString().contains("src/Main.java"));
-        assertFalse(text.toString().contains("private staged diff"));
         assertFalse(text.toString().contains("class Main"));
         assertFalse(text.toString().contains(ROOT.toString()));
     }
@@ -105,8 +102,7 @@ class StagedChangeContextBuilderTest {
     @Test
     void usesMetadataOnlyCanonicalDiffPrefix() {
         CapturedStagedChange captured = captured(List.of(
-                blob("src/Main.java", StagedFileStatus.ADDED, "class Main {}\n", null)),
-                "x".repeat(200) + "\n+password=TOPSECRET\n" + "y".repeat(2_000));
+                blob("src/Main.java", StagedFileStatus.ADDED, "class Main {}\n", null)));
 
         ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
                 .build(captured);
@@ -132,7 +128,7 @@ class StagedChangeContextBuilderTest {
     void countsOnlyRedactionMarkersThatFitInsideAnIncludedFileBlock() {
         CapturedStagedChange captured = captured(List.of(
                 blob("src/Main.java", StagedFileStatus.ADDED,
-                        "x".repeat(500) + "\npassword=TOPSECRET\n", null)), "diff\n");
+                        "x".repeat(500) + "\npassword=TOPSECRET\n", null)));
 
         ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 180))
                 .build(captured);
@@ -148,7 +144,7 @@ class StagedChangeContextBuilderTest {
         CapturedStagedChange captured = captured(List.of(
                 blob("src/Main.java", StagedFileStatus.ADDED, "class Main {}\n", null),
                 blob("node_modules/Dependency.java", StagedFileStatus.ADDED,
-                        "UNTRUSTED_DEPENDENCY_SENTINEL\n", null)), "diff\n");
+                        "UNTRUSTED_DEPENDENCY_SENTINEL\n", null)));
 
         ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
                 .build(captured);
@@ -164,10 +160,7 @@ class StagedChangeContextBuilderTest {
                 blob("src/Main.java", StagedFileStatus.ADDED, "class Main {}\n", null),
                 blob("private.key", StagedFileStatus.ADDED, "-----BEGIN PRIVATE KEY-----\nKEY_SECRET_SENTINEL\n", null),
                 blob("node_modules/Dependency.java", StagedFileStatus.ADDED,
-                        "NODE_MODULES_SECRET_SENTINEL\n", null)),
-                "diff --git a/private.key b/private.key\n+-----BEGIN PRIVATE KEY-----\nKEY_SECRET_SENTINEL\n"
-                        + "diff --git a/node_modules/Dependency.java b/node_modules/Dependency.java\n"
-                        + "+NODE_MODULES_SECRET_SENTINEL\n");
+                        "NODE_MODULES_SECRET_SENTINEL\n", null)));
 
         ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
                 .build(captured);
@@ -198,22 +191,17 @@ class StagedChangeContextBuilderTest {
         assertTrue(snapshot.promptContent().contains("diff --staged src/Deleted.java\nstatus: DELETED"));
     }
 
-    private static CapturedStagedChange captured(List<IndexBlob> blobs, String diff) {
+    private static CapturedStagedChange captured(List<IndexBlob> blobs) {
         List<StagedChangeFile> files = blobs.stream().map(IndexBlob::file)
                 .sorted(java.util.Comparator.comparing(file -> file.path().toString())).toList();
-        return capturedWithDeclaredFiles(files, blobs, diff);
+        return capturedWithDeclaredFiles(files, blobs);
     }
 
     private static CapturedStagedChange capturedWithDeclaredFiles(List<StagedChangeFile> files, List<IndexBlob> blobs) {
-        return capturedWithDeclaredFiles(files, blobs, "diff\n");
-    }
-
-    private static CapturedStagedChange capturedWithDeclaredFiles(List<StagedChangeFile> files, List<IndexBlob> blobs,
-            String diff) {
         List<StagedChangeFile> sortedFiles = files.stream()
                 .sorted(java.util.Comparator.comparing(file -> file.path().toString())).toList();
         return new CapturedStagedChange(new StagedChange(ROOT, "a".repeat(64), "b".repeat(40), "c".repeat(40),
-                "d".repeat(64), sortedFiles, 8, 3), blobs, diff);
+                "d".repeat(64), sortedFiles, 8, 3), blobs);
     }
 
     private static IndexBlob blob(String path, StagedFileStatus status, String index, String base) {

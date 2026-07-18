@@ -50,7 +50,7 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
             prepare(); destination = destination(Instant.now(clock));
             artifactTemp = Files.createTempFile(paths.passportsDirectory(), ".passport-", ".tmp");
             Files.write(artifactTemp, data, StandardOpenOption.TRUNCATE_EXISTING);
-            moveArtifactWithoutReplacing(artifactTemp, destination);
+            move(artifactTemp, destination, false);
             artifactTemp = null;
             artifactPublished = true;
             byte[] pointer = strictUtf8(destination.toAbsolutePath().normalize() + "\n");
@@ -133,10 +133,6 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
             if (replace) mover.move(from, to, StandardCopyOption.REPLACE_EXISTING);
             else mover.move(from, to);
         }
-    }
-    private void moveArtifactWithoutReplacing(Path from, Path to) throws IOException {
-        if (Files.exists(to, LinkOption.NOFOLLOW_LINKS)) throw new IOException("destination already exists");
-        mover.move(from, to);
     }
     private static byte[] strictUtf8(String value) { try { ByteBuffer bytes = StandardCharsets.UTF_8.newEncoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).encode(java.nio.CharBuffer.wrap(value)); byte[] result = new byte[bytes.remaining()]; bytes.get(result); return result; } catch (CharacterCodingException exception) { throw ChangePassportPersistenceException.saveFailure(); } }
     private static String read(Path path, int limit) throws IOException { byte[] bytes = bounded(path, limit); try { return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString(); } catch (CharacterCodingException exception) { throw new IOException("invalid UTF-8", exception); } }

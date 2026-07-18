@@ -1,6 +1,7 @@
 package dev.codedefense.cli;
 
 import dev.codedefense.application.VerifyLatestChangePassportUseCase;
+import dev.codedefense.change.GitChangeException;
 import dev.codedefense.domain.PassportStatus;
 import dev.codedefense.domain.PassportVerification;
 import dev.codedefense.passport.ChangePassportStore;
@@ -25,7 +26,7 @@ class PassportCommandTest {
         var passport = PassportTestFixtures.passport(PassportStatus.CURRENT);
         VerifyLatestChangePassportUseCase useCase = new VerifyLatestChangePassportUseCase(path -> {
             calls.incrementAndGet();
-            return new dev.codedefense.change.CapturedStagedChange(passport.change(), List.of(), "");
+            return new dev.codedefense.change.CapturedStagedChange(passport.change(), List.of());
         }, storeWith(passport));
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         CommandLine commandLine = new CommandLine(new PassportCommand(useCase));
@@ -41,6 +42,19 @@ class PassportCommandTest {
     void verifyOptionIsRequired() {
         assertEquals(ExitCodes.INVALID_USAGE, new CommandLine(new PassportCommand(new VerifyLatestChangePassportUseCase(
                 path -> { throw new AssertionError(); }, emptyStore()))).execute());
+    }
+
+    @Test
+    void mapsInvalidRepositoryAndGitExecutionFailuresToDocumentedExitCodes() {
+        var passport = PassportTestFixtures.passport(PassportStatus.CURRENT);
+        ChangePassportStore store = storeWith(passport);
+
+        assertEquals(ExitCodes.INVALID_PROJECT_PATH, new CommandLine(new PassportCommand(
+                new VerifyLatestChangePassportUseCase(path -> { throw new GitChangeException(GitChangeException.Kind.INVALID_REPOSITORY); }, store)))
+                .execute("--verify", "."));
+        assertEquals(ExitCodes.GIT_EXECUTION_FAILED, new CommandLine(new PassportCommand(
+                new VerifyLatestChangePassportUseCase(path -> { throw new GitChangeException(GitChangeException.Kind.EXECUTION_FAILED); }, store)))
+                .execute("--verify", "."));
     }
 
     private static ChangePassportStore emptyStore() {

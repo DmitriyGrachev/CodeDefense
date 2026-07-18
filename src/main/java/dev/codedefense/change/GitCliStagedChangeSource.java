@@ -4,6 +4,7 @@ import dev.codedefense.ai.ProcessExecutor;
 import dev.codedefense.ai.ProcessResult;
 import dev.codedefense.ai.ProcessSpec;
 import dev.codedefense.domain.StagedChange;
+import dev.codedefense.domain.StagedChangeIdentity;
 import dev.codedefense.domain.StagedChangeFile;
 import dev.codedefense.domain.StagedFileStatus;
 import dev.codedefense.scanner.ProjectFileFilter;
@@ -64,23 +65,14 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
 
     @Override
     public CapturedStagedChange capture(Path requestedPath) {
-        Path requestedRoot = normalizeDirectory(requestedPath);
-        Path root = resolveRepositoryRoot(requestedRoot);
-        String baseCommit = requiredText(run(root, 256, "rev-parse", "--verify", "HEAD"));
-        String indexTree = requiredText(run(root, 256, "write-tree"));
-        requireObjectId(baseCommit);
-        requireObjectId(indexTree);
-
-        List<RawEntry> rawEntries = parseRaw(requiredBytes(run(root, maximumDiffBytes,
-                "diff", "--cached", "--raw", "-z", "--no-abbrev", "--find-renames=100%")));
-        if (rawEntries.isEmpty()) {
+        CapturedIndex capturedIndex = captureIndex(requestedPath);
+        if (!capturedIndex.identity().hasStagedChanges()) {
             throw new GitChangeException(GitChangeException.Kind.NO_STAGED_CHANGE);
         }
+        Path root = capturedIndex.root();
+        List<RawEntry> rawEntries = capturedIndex.rawEntries();
         Map<Path, LineCounts> lineCounts = parseNumstat(requiredBytes(run(root, maximumDiffBytes,
-                "diff", "--cached", "--numstat", "-z", "--no-ext-diff")));
-        ProcessResult canonicalDiffResult = run(root, maximumDiffBytes,
-                "diff", "--cached", "--no-ext-diff", "--no-color", "--full-index", "--binary");
-        String canonicalDiff = decodeCommandText(requiredBytes(canonicalDiffResult), canonicalDiffResult.stdoutTruncated());
+                "diff", "--cached", "--no-ext-diff", "--no-textconv", "--numstat", "-z")));
 
         List<EntryWithFile> files = new ArrayList<>();
         for (RawEntry entry : rawEntries) {
@@ -99,10 +91,10 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
         int deletedLines = changedFiles.stream().mapToInt(StagedChangeFile::deletedLines).sum();
         StagedChange change = new StagedChange(
                 root,
-                sha256(root.toString()),
-                baseCommit,
-                indexTree,
-                sha256("codedefense-staged-change-v1\0" + baseCommit + "\0" + indexTree),
+                capturedIndex.identity().repositoryIdentityHash(),
+                capturedIndex.identity().baseCommit(),
+                capturedIndex.identity().indexTree(),
+                capturedIndex.identity().diffFingerprint(),
                 changedFiles,
                 addedLines,
                 deletedLines);
@@ -122,7 +114,32 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                     index.map(DecodedBlob::content), index.map(DecodedBlob::truncated).orElse(false),
                     base.map(DecodedBlob::content), base.map(DecodedBlob::truncated).orElse(false)));
         }
-        return new CapturedStagedChange(change, blobs, canonicalDiff);
+        return new CapturedStagedChange(change, blobs);
+    }
+
+    @Override
+    public StagedChangeIdentity captureIdentity(Path requestedPath) {
+        return captureIndex(requestedPath).identity();
+    }
+
+    private CapturedIndex captureIndex(Path requestedPath) {
+        Path requestedRoot = normalizeDirectory(requestedPath);
+        Path root = resolveRepositoryRoot(requestedRoot);
+        String baseCommit = requiredText(run(root, 256, "rev-parse", "--verify", "HEAD"));
+        String indexTree = requiredText(run(root, 256, "write-tree"));
+        requireObjectId(baseCommit);
+        requireObjectId(indexTree);
+        List<RawEntry> rawEntries = parseRaw(requiredBytes(run(root, maximumDiffBytes,
+                "diff", "--cached", "--no-ext-diff", "--no-textconv", "--raw", "-z", "--no-abbrev",
+                "--find-renames=100%")));
+        StagedChangeIdentity identity = new StagedChangeIdentity(
+                root,
+                sha256(root.toString()),
+                baseCommit,
+                indexTree,
+                sha256("codedefense-staged-change-v1\0" + baseCommit + "\0" + indexTree),
+                rawEntries.stream().map(RawEntry::path).map(StagedChangeIdentity::pathHash).sorted().toList());
+        return new CapturedIndex(root, rawEntries, identity);
     }
 
     private Path normalizeDirectory(Path requestedPath) {
@@ -435,6 +452,9 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
     }
 
     private record EntryWithFile(RawEntry entry, StagedChangeFile file, boolean binary) {
+    }
+
+    private record CapturedIndex(Path root, List<RawEntry> rawEntries, StagedChangeIdentity identity) {
     }
 
     private record DecodedBlob(String content, boolean truncated) {

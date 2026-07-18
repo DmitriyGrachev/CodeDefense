@@ -52,8 +52,26 @@ class GitCliStagedChangeSourceTest {
                 captured.change().files().stream().map(file -> file.status()).toList());
         assertTrue(captured.blobs().stream().anyMatch(blob -> blob.indexContent().orElse("").contains("INDEX_APP")));
         assertFalse(captured.blobs().stream().anyMatch(blob -> blob.indexContent().orElse("").contains("WORKTREE_SENTINEL")));
-        assertTrue(executor.specifications().stream().allMatch(spec -> spec.command().stream()
-                .noneMatch(token -> token.contains("--ext-diff") || token.contains("textconv") || token.contains("sh -c"))));
+        assertTrue(executor.specifications().stream()
+                .filter(spec -> spec.command().contains("diff"))
+                .allMatch(spec -> spec.command().contains("--no-ext-diff")
+                        && spec.command().contains("--no-textconv")));
+        assertTrue(executor.specifications().stream().noneMatch(spec -> spec.command().contains("--full-index")));
+    }
+
+    @Test
+    void suppressesTextConversionWhenTheRepositoryDeclaresADiffDriver() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("textconv"));
+        Files.writeString(root.resolve(".gitattributes"), "*.java diff=private-converter\n");
+        FakeProcessExecutor executor = successfulExecutor(root);
+
+        new GitCliStagedChangeSource(executor).capture(root);
+
+        List<ProcessSpec> diffSpecifications = executor.specifications().stream()
+                .filter(spec -> spec.command().contains("diff")).toList();
+        assertFalse(diffSpecifications.isEmpty());
+        assertTrue(diffSpecifications.stream().allMatch(spec -> spec.command().contains("--no-textconv")));
+        assertTrue(executor.specifications().stream().noneMatch(spec -> spec.command().contains("private-converter")));
     }
 
     @Test
@@ -86,17 +104,14 @@ class GitCliStagedChangeSourceTest {
     }
 
     @Test
-    void transferObjectStringFormsDoNotExposeBlobOrDiffContent() throws Exception {
+    void transferObjectStringFormsDoNotExposeBlobContent() throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve("safe-string"));
         FakeProcessExecutor executor = successfulExecutor(root);
         executor.blobs.put(NEW, result("private-index-source", false));
-        executor.responses.put(commandKey("diff", "--cached", "--no-ext-diff", "--no-color", "--full-index", "--binary"),
-                result("private-canonical-diff", false));
 
         CapturedStagedChange captured = new GitCliStagedChangeSource(executor).capture(root);
 
         assertFalse(captured.toString().contains("private-index-source"));
-        assertFalse(captured.toString().contains("private-canonical-diff"));
         assertFalse(captured.blobs().getFirst().toString().contains("private-index-source"));
     }
 
@@ -104,7 +119,7 @@ class GitCliStagedChangeSourceTest {
     void rejectsMalformedRawOutputAndUnsafePathsWithSafeMessages() throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve("unsafe"));
         FakeProcessExecutor malformed = successfulExecutor(root);
-        malformed.responses.put(commandKey("diff", "--cached", "--raw", "-z", "--no-abbrev", "--find-renames=100%"),
+        malformed.responses.put(rawDiffKey(),
                 result(":100644 100644 " + OLD + " " + NEW + " M\0", false));
 
         GitChangeException malformedFailure = assertThrows(GitChangeException.class,
@@ -112,7 +127,7 @@ class GitCliStagedChangeSourceTest {
         assertFalse(malformedFailure.getMessage().contains(OLD));
 
         FakeProcessExecutor traversal = successfulExecutor(root);
-        traversal.responses.put(commandKey("diff", "--cached", "--raw", "-z", "--no-abbrev", "--find-renames=100%"),
+        traversal.responses.put(rawDiffKey(),
                 result(":000000 100644 " + zeros() + " " + NEW + " A\0../secret.java\0", false));
         assertThrows(GitChangeException.class, () -> new GitCliStagedChangeSource(traversal).capture(root));
     }
@@ -126,7 +141,7 @@ class GitCliStagedChangeSourceTest {
         assertThrows(GitChangeException.class, () -> new GitCliStagedChangeSource(noHead).capture(root));
 
         FakeProcessExecutor empty = successfulExecutor(root);
-        empty.responses.put(commandKey("diff", "--cached", "--raw", "-z", "--no-abbrev", "--find-renames=100%"), result("", false));
+        empty.responses.put(rawDiffKey(), result("", false));
         assertThrows(GitChangeException.class, () -> new GitCliStagedChangeSource(empty).capture(root));
 
         FakeProcessExecutor timedOut = successfulExecutor(root);
@@ -139,14 +154,25 @@ class GitCliStagedChangeSourceTest {
     }
 
     @Test
+    void capturesAnEmptyIndexIdentityWithoutWeakeningInitialCaptureValidation() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("empty-identity"));
+        FakeProcessExecutor executor = successfulExecutor(root);
+        executor.responses.put(rawDiffKey(), result("", false));
+        GitCliStagedChangeSource source = new GitCliStagedChangeSource(executor);
+
+        assertFalse(source.captureIdentity(root).hasStagedChanges());
+        assertThrows(GitChangeException.class, () -> source.capture(root));
+    }
+
+    @Test
     void excludesUnsupportedAndGitSpecialEntriesInsteadOfReadingThem() throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve("special"));
         FakeProcessExecutor executor = successfulExecutor(root);
-        executor.responses.put(commandKey("diff", "--cached", "--raw", "-z", "--no-abbrev", "--find-renames=100%"), result(
+        executor.responses.put(rawDiffKey(), result(
                 ":000000 120000 " + zeros() + " " + NEW + " A\0linked.java\0"
                         + ":000000 160000 " + zeros() + " " + RENAMED + " A\0submodule\0"
                         + ":000000 100644 " + zeros() + " " + OLD + " A\0image.png\0", false));
-        executor.responses.put(commandKey("diff", "--cached", "--numstat", "-z", "--no-ext-diff"),
+        executor.responses.put(numstatDiffKey(),
                 result("1\t0\tlinked.java\0" + "1\t0\tsubmodule\0" + "1\t0\timage.png\0", false));
 
         CapturedStagedChange captured = new GitCliStagedChangeSource(executor).capture(root);
@@ -159,12 +185,12 @@ class GitCliStagedChangeSourceTest {
     void excludesRegularToSymlinkTransitionsAndFilesBelowExcludedDirectories() throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve("excluded-components"));
         FakeProcessExecutor executor = successfulExecutor(root);
-        executor.responses.put(commandKey("diff", "--cached", "--raw", "-z", "--no-abbrev", "--find-renames=100%"), result(
+        executor.responses.put(rawDiffKey(), result(
                 ":100644 120000 " + OLD + " " + NEW + " M\0App.java\0"
                         + ":000000 100644 " + zeros() + " " + RENAMED + " A\0node_modules/Dependency.java\0"
                         + ":000000 100644 " + zeros() + " " + NEW + " A\0target/generated/Generated.java\0"
                         + ":000000 100644 " + zeros() + " " + OLD + " A\0.git/hooks/Hook.java\0", false));
-        executor.responses.put(commandKey("diff", "--cached", "--numstat", "-z", "--no-ext-diff"), result(
+        executor.responses.put(numstatDiffKey(), result(
                 "1\t1\tApp.java\0" + "1\t0\tnode_modules/Dependency.java\0"
                         + "1\t0\ttarget/generated/Generated.java\0" + "1\t0\t.git/hooks/Hook.java\0", false));
 
@@ -179,15 +205,14 @@ class GitCliStagedChangeSourceTest {
         executor.responses.put(commandKey("rev-parse", "--show-toplevel"), result(root.toString(), false));
         executor.responses.put(commandKey("rev-parse", "--verify", "HEAD"), result(BASE, false));
         executor.responses.put(commandKey("write-tree"), result(TREE, false));
-        executor.responses.put(commandKey("diff", "--cached", "--raw", "-z", "--no-abbrev", "--find-renames=100%"), result(
+        executor.responses.put(rawDiffKey(), result(
                 ":100644 100644 " + OLD + " " + NEW + " M\0App.java\0"
                         + ":100644 000000 " + OLD + " " + zeros() + " D\0Gone.java\0"
                         + ":000000 100644 " + zeros() + " " + NEW + " A\0New.java\0"
                         + ":100644 100644 " + OLD + " " + RENAMED + " R100\0Old.java\0Renamed.java\0", false));
-        executor.responses.put(commandKey("diff", "--cached", "--numstat", "-z", "--no-ext-diff"), result(
+        executor.responses.put(numstatDiffKey(), result(
                 "2\t1\tApp.java\0" + "0\t3\tGone.java\0" + "4\t0\tNew.java\0"
                         + "1\t1\t\0Old.java\0Renamed.java\0", false));
-        executor.responses.put(commandKey("diff", "--cached", "--no-ext-diff", "--no-color", "--full-index", "--binary"), result("canonical diff", false));
         executor.blobs.put(OLD, result("BASE_APP", false));
         executor.blobs.put(NEW, result("INDEX_APP", false));
         executor.blobs.put(RENAMED, result("INDEX_RENAMED", false));
@@ -208,6 +233,15 @@ class GitCliStagedChangeSourceTest {
 
     private static String commandKey(String... command) {
         return String.join("\u0001", command);
+    }
+
+    private static String rawDiffKey() {
+        return commandKey("diff", "--cached", "--no-ext-diff", "--no-textconv", "--raw", "-z", "--no-abbrev",
+                "--find-renames=100%");
+    }
+
+    private static String numstatDiffKey() {
+        return commandKey("diff", "--cached", "--no-ext-diff", "--no-textconv", "--numstat", "-z");
     }
 
     private static String zeros() {

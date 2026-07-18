@@ -40,6 +40,15 @@ class StagedChangeAnalysisValidatorTest {
     }
 
     @Test
+    void rejectsTheRightQuestionIdsInTheWrongOrder() {
+        InvalidCodexResponseException exception = assertThrows(InvalidCodexResponseException.class,
+                () -> new StagedChangeAnalysisValidator().validate(
+                        analysis("counterfactual", "decision", "test-prediction"), snapshot()));
+
+        assertEquals(SAFE_ERROR, exception.getMessage());
+    }
+
+    @Test
     void rejectsEvidenceOutsideSelectedStagedLines() {
         ProjectAnalysis invalid = analysisWithEvidence("src/Missing.java", 1, 1);
 

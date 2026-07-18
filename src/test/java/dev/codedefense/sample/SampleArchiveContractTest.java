@@ -8,7 +8,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.junit.jupiter.api.Test;
@@ -23,7 +22,7 @@ class SampleArchiveContractTest {
     void embeddedArchiveHasExactlyTheApprovedTextOnlyProjectFiles() throws Exception {
         Map<String, String> contents = contents();
 
-        assertEquals(expectedPaths(), contents.keySet());
+        assertEquals(expectedPathsInSortedOrder(), List.copyOf(contents.keySet()));
         assertTrue(contents.values().stream().noneMatch(value -> value.indexOf('\0') >= 0));
         assertTrue(contents.values().stream().noneMatch(String::isBlank));
         assertTrue(contents.values().stream().noneMatch(value -> value.indexOf('\r') >= 0));
@@ -39,8 +38,13 @@ class SampleArchiveContractTest {
 
         assertTrue(contents.get("pom.xml").contains("codedefense-sample-news-service"));
         assertTrue(contents.get("pom.xml").contains("spring-boot-starter"));
-        assertTrue(contents.get("src/main/java/com/codedefense/sample/news/ArticleApplication.java")
+        String application = contents.get("src/main/java/com/codedefense/sample/news/ArticleApplication.java");
+        assertTrue(application
                 .contains("package com.codedefense.sample.news;"));
+        assertTrue(application.contains("import org.springframework.retry.annotation.EnableRetry;"));
+        assertTrue(application.contains("@EnableRetry"));
+        assertTrue(contents.get("pom.xml").contains("spring-retry"));
+        assertTrue(contents.get("pom.xml").contains("spring-boot-starter-aop"));
         assertTrue(contents.get("src/main/java/com/codedefense/sample/news/ArticleScheduler.java").contains("@Scheduled"));
         assertTrue(contents.get("src/main/java/com/codedefense/sample/news/ArticleScheduler.java").contains("public synchronized void pollFeed()"));
         assertTrue(contents.get("src/main/java/com/codedefense/sample/news/ArticleScheduler.java").contains("feedClient"));
@@ -109,8 +113,8 @@ class SampleArchiveContractTest {
                 .toString();
     }
 
-    private static Set<String> expectedPaths() {
-        return Set.of(
+    private static List<String> expectedPathsInSortedOrder() {
+        return List.of(
                 "README.md",
                 "pom.xml",
                 "src/main/java/com/codedefense/sample/news/Article.java",

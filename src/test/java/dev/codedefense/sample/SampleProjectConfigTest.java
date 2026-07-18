@@ -19,6 +19,16 @@ class SampleProjectConfigTest {
     }
 
     @Test
+    void requiresCapacityForEveryRequiredEmbeddedSampleFile() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new SampleProjectConfig("sample/sample-project.zip", 1, 14, 1, 1, 1));
+
+        SampleProjectConfig config = new SampleProjectConfig("sample/sample-project.zip", 1, 15, 1, 1, 1);
+
+        assertEquals(15, config.maximumEntries());
+    }
+
+    @Test
     void rejectsBlankResourcePathAndNonPositiveBounds() {
         assertThrows(IllegalArgumentException.class,
                 () -> new SampleProjectConfig(" ", 1, 1, 1, 1, 1));
@@ -38,5 +48,20 @@ class SampleProjectConfigTest {
                 () -> new SampleProjectConfig("C:\\sample.zip", 1, 1, 1, 1, 1));
         assertThrows(IllegalArgumentException.class,
                 () -> new SampleProjectConfig("sample.zip", 1, 1, 4, 3, 1));
+    }
+
+    @Test
+    void rejectsUnsafeClasspathResourcePathSegments() {
+        for (String unsafePath : new String[] {
+                "sample\\sample-project.zip",
+                "sample//sample-project.zip",
+                "./sample-project.zip",
+                "sample/./sample-project.zip",
+                "sample/../sample-project.zip",
+                "sample/sample-project.zip/"
+        }) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new SampleProjectConfig(unsafePath, 1, 15, 1, 1, 1));
+        }
     }
 }

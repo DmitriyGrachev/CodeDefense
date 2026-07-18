@@ -12,6 +12,8 @@ import dev.codedefense.ai.exception.CodexTimeoutException;
 import dev.codedefense.ai.exception.InvalidCodexResponseException;
 import dev.codedefense.analysis.ProjectAnalyzer;
 import dev.codedefense.application.CodeDefenseConfig;
+import dev.codedefense.application.CodeDefenseRuntime;
+import dev.codedefense.application.DefaultProjectDefenseRunner;
 import dev.codedefense.domain.CodeEvidence;
 import dev.codedefense.domain.ProjectAnalysis;
 import dev.codedefense.domain.ProjectComponent;
@@ -206,12 +208,16 @@ class StartCommandProjectAnalysisTest {
             ConfirmationPrompt confirmation,
             ByteArrayOutputStream output,
             ByteArrayOutputStream error) throws Exception {
-        CommandLine commandLine = new CommandLine(new StartCommand(
+        var runner = new DefaultProjectDefenseRunner(
                 validScanner(),
                 new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
                 confirmation,
-                analyzer,
-                new ProjectAnalysisRenderer()));
+                new ProjectAnalysisRenderer(),
+                ignored -> new CodeDefenseRuntime(analyzer, analysis -> null,
+                        (snapshot, analysis, session) -> {
+                            throw new AssertionError("No report is expected without an interview session");
+                        }));
+        CommandLine commandLine = new CommandLine(new StartCommand(runner));
         commandLine.setOut(new PrintWriter(output, true, StandardCharsets.UTF_8));
         commandLine.setErr(new PrintWriter(error, true, StandardCharsets.UTF_8));
         return commandLine;

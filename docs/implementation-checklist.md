@@ -7,8 +7,8 @@
 - [x] Iteration 4 — Codex environment checking and process adapter.
 - [x] Iteration 5 — project analysis and terminal overview.
 - [x] Iteration 6 — adaptive three-question interview.
-- [ ] Iteration 7 — Markdown reports and report command.
-- [ ] Iteration 8 — embedded sample project.
+- [x] Iteration 7 — Markdown reports and report command.
+- [X] Iteration 8 — embedded sample project.
 - [ ] Iteration 9 — reliability, release documentation, and submission readiness.
 
 Only the current approved iteration may be implemented. The detailed acceptance criteria are in the [master implementation plan](codedefense-mvp-implementation-plan.md).

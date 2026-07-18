@@ -25,6 +25,14 @@ class CodeDefenseRuntimeFactoryTest {
   Object generator=field(runtime.reportService(), "narrativeGenerator"); Object narrativeProvider=field(generator,"provider");
   assertSame(provider,analyzerProvider);assertSame(provider,evaluatorProvider);assertSame(provider,narrativeProvider);assertEquals(0,providerCalls.get());assertEquals(0,inputReads.get());
  }
+ @Test void defersStagedAnalyzerConstructionUntilTheLaterWorkflowRequestsIt() throws Exception {
+  AtomicInteger providerCalls=new AtomicInteger(); AiProvider provider=r->{providerCalls.incrementAndGet();throw new AssertionError();};
+  CodeDefenseRuntime runtime=new CodeDefenseRuntimeFactory().create(provider,new ObjectMapper(),CodexRuntimeConfig.defaults(),p->"skip",new NoOutput());
+  assertFalse((Object) runtime.stagedChangeAnalyzerFactory() instanceof dev.codedefense.analysis.AiStagedChangeAnalyzer);
+  assertEquals(0,providerCalls.get());
+  Object stagedProvider=field(runtime.stagedChangeAnalyzer(),"aiProvider");
+  assertSame(provider,stagedProvider);assertEquals(0,providerCalls.get());
+ }
  private static Object field(Object target,String name)throws Exception{Field f=target.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(target);}
  private static final class NoOutput implements InterviewOutput {public void renderIntroduction(int c){}public void renderPrimaryQuestion(int c,int t,dev.codedefense.domain.TechnicalQuestion q){}public void renderInputValidationError(String m){}public void renderEvaluating(){}public void renderEvaluation(dev.codedefense.domain.AnswerEvaluation e){}public void renderFollowUp(String q){}public void renderSkipped(boolean f){}public void renderQuestionScore(int n,int s){}public void renderSummary(dev.codedefense.domain.InterviewSession s){}}
 }

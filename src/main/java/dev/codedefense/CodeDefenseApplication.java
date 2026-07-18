@@ -5,6 +5,8 @@ import dev.codedefense.cli.ReportCommand;
 import dev.codedefense.cli.RootCommand;
 import dev.codedefense.cli.SampleCommand;
 import dev.codedefense.cli.StartCommand;
+import dev.codedefense.cli.ProveCommand;
+import dev.codedefense.cli.PassportCommand;
 import dev.codedefense.application.DefaultProjectDefenseRunner;
 import dev.codedefense.application.ProjectDefenseRunner;
 import dev.codedefense.application.RunSampleUseCase;
@@ -25,7 +27,7 @@ public final class CodeDefenseApplication {
         return createCommandLine(
                 new StartCommand(runner),
                 new SampleCommand(new RunSampleUseCase(new SampleProjectExtractor(), runner)),
-                new ReportCommand());
+                new ReportCommand(), new ProveCommand(), new PassportCommand());
     }
 
     /** Creates the CLI object graph with an explicitly supplied start command. */
@@ -41,13 +43,23 @@ public final class CodeDefenseApplication {
     /** Creates the CLI object graph with explicitly supplied command adapters. */
     public static CommandLine createCommandLine(StartCommand startCommand, SampleCommand sampleCommand,
             ReportCommand reportCommand) {
+        return createCommandLine(startCommand, sampleCommand, reportCommand, new ProveCommand(), new PassportCommand());
+    }
+
+    /** Creates the CLI object graph with explicitly supplied command adapters. */
+    public static CommandLine createCommandLine(StartCommand startCommand, SampleCommand sampleCommand,
+            ReportCommand reportCommand, ProveCommand proveCommand, PassportCommand passportCommand) {
         Objects.requireNonNull(startCommand, "Start command");
         Objects.requireNonNull(sampleCommand, "Sample command");
         Objects.requireNonNull(reportCommand, "Report command");
+        Objects.requireNonNull(proveCommand, "Prove command");
+        Objects.requireNonNull(passportCommand, "Passport command");
         CommandLine commandLine = new CommandLine(new RootCommand());
         commandLine.addSubcommand("start", startCommand);
         commandLine.addSubcommand("sample", sampleCommand);
         commandLine.addSubcommand("report", reportCommand);
+        commandLine.addSubcommand("prove", proveCommand);
+        commandLine.addSubcommand("passport", passportCommand);
         commandLine.setParameterExceptionHandler((exception, arguments) -> {
             exception.getCommandLine().getErr().println(exception.getMessage());
             exception.getCommandLine().getErr().println("Try 'codedefense --help' for more information.");

@@ -94,8 +94,16 @@ public final class DefaultStagedChangeDefenseRunner implements StagedChangeDefen
             ProjectAnalysis analysis = runtime.stagedChangeAnalyzer().analyze(captured.change(), snapshot);
             var session = runtime.interviewRunner().conduct(analysis);
             if (session != null) {
-                Path saved = passportServiceFactory.get().createAndSave(captured.change(), analysis, session);
-                out.println("Change Passport saved: " + saved.getFileName());
+                SavedChangePassport saved = passportServiceFactory.get()
+                        .createAndSave(captured.change(), analysis, session);
+                out.println("Change Passport saved: " + saved.path().getFileName());
+                out.println("Status: " + saved.status());
+                out.println("Overall score: " + session.overallScore() + "/100");
+                out.println("Fingerprint: " + captured.change().diffFingerprint().substring(0, 12));
+                out.println("Next:");
+                out.println("  codedefense passport show .");
+                out.println("  codedefense passport verify .");
+                out.println("  codedefense passport export . --format json --output passport.json");
             }
             return ExitCodes.SUCCESS;
         } catch (GitChangeException exception) {
@@ -142,7 +150,7 @@ public final class DefaultStagedChangeDefenseRunner implements StagedChangeDefen
                 err.println("Staged change changed during capture; retry.");
                 yield ExitCodes.GIT_EXECUTION_FAILED;
             }
-            case NO_HEAD, EXECUTION_FAILED, MALFORMED_DATA -> {
+            case NO_HEAD, UNSUPPORTED_CHANGE, EXECUTION_FAILED, MALFORMED_DATA -> {
                 err.println("Git could not safely capture the staged change.");
                 yield ExitCodes.GIT_EXECUTION_FAILED;
             }

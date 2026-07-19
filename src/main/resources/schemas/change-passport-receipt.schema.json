@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codedefense.dev/schemas/change-passport-receipt-v3.json",
+  "title": "CodeDefense Change Passport Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "receiptId", "repositoryIdentityHash", "changeKind",
+    "baseCommit", "sourceIdentity", "diffFingerprint", "createdAt",
+    "statusAtCreation", "files", "categories", "overallScore", "readiness",
+    "skippedPrimaryCount", "model", "attemptId", "supersedes",
+    "attemptNumber", "focus"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 3},
+    "receiptId": {"type": "string", "format": "uuid"},
+    "repositoryIdentityHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "changeKind": {"enum": ["STAGED", "COMMIT", "RANGE"]},
+    "baseCommit": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "sourceIdentity": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "diffFingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "createdAt": {"type": "string"},
+    "statusAtCreation": {"enum": ["CURRENT", "EXPIRED"]},
+    "files": {"type": "array", "minItems": 1, "maxItems": 30},
+    "categories": {"type": "array", "minItems": 3, "maxItems": 3},
+    "overallScore": {"type": "integer", "minimum": 0, "maximum": 100},
+    "readiness": {"type": "string"},
+    "skippedPrimaryCount": {"type": "integer", "minimum": 0, "maximum": 3},
+    "model": {"type": "string", "minLength": 1},
+    "attemptId": {"type": "string", "format": "uuid"},
+    "supersedes": {"type": ["string", "null"], "format": "uuid"},
+    "attemptNumber": {"type": "integer", "minimum": 1},
+    "focus": {"enum": ["balanced", "architecture", "failure-modes", "testing"]}
+  }
+}

@@ -17,11 +17,12 @@ import java.util.Objects;
 public final class ChangePassportService {
     private final StagedChangeSource source; private final ChangePassportStore store; private final Clock clock; private final String model;
     public ChangePassportService(StagedChangeSource source, ChangePassportStore store, Clock clock, String model) { this.source=Objects.requireNonNull(source,"source"); this.store=Objects.requireNonNull(store,"store"); this.clock=Objects.requireNonNull(clock,"clock"); this.model=Objects.requireNonNull(model,"model"); }
-    public Path createAndSave(StagedChange beforeInterview, ProjectAnalysis analysis, InterviewSession session) {
+    public SavedChangePassport createAndSave(StagedChange beforeInterview, ProjectAnalysis analysis, InterviewSession session) {
         Objects.requireNonNull(beforeInterview,"beforeInterview");
         StagedChangeIdentity recaptured = source.captureIdentity(beforeInterview.repositoryRoot());
         PassportStatus status = StagedChangeIdentity.from(beforeInterview).equals(recaptured)
                 ? PassportStatus.CURRENT : PassportStatus.EXPIRED;
-        return store.save(new ChangePassport(beforeInterview, analysis, session, Instant.now(clock), model, status));
+        Path path = store.save(new ChangePassport(beforeInterview, analysis, session, Instant.now(clock), model, status));
+        return new SavedChangePassport(path, status);
     }
 }

@@ -98,10 +98,20 @@ class StagedChangeDefenseRunnerTest {
                 out -> { events.add("runtime"); return runtime; },
                 () -> { events.add("passport"); return new ChangePassportService(source, store, Clock.systemUTC(), "model"); });
 
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
         assertEquals(ExitCodes.SUCCESS, runner.run(Path.of("."), false, false,
-                new PrintWriter(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8), new PrintWriter(System.err)));
+                new PrintWriter(output, true, StandardCharsets.UTF_8), new PrintWriter(System.err)));
 
         assertEquals(List.of("capture", "confirm", "runtime", "analyze", "interview", "passport", "capture", "save"), events);
+        String text = output.toString(StandardCharsets.UTF_8);
+        assertTrue(text.contains("Status: CURRENT"));
+        assertTrue(text.contains("Overall score: 55/100"));
+        assertTrue(text.contains("Fingerprint: dddddddddddd"));
+        assertTrue(text.contains("codedefense passport show ."));
+        assertTrue(text.contains("codedefense passport verify ."));
+        assertTrue(text.contains("codedefense passport export . --format json --output passport.json"));
+        assertTrue(!text.contains("private-answer"));
     }
 
     @Test

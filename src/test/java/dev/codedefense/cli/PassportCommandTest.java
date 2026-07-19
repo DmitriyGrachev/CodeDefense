@@ -21,6 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PassportCommandTest {
     @Test
+    void registersCommandCenterSubcommands() {
+        CommandLine commandLine = new CommandLine(new PassportCommand());
+        assertTrue(commandLine.getSubcommands().keySet().containsAll(
+                java.util.Set.of("show", "list", "verify", "export")));
+    }
+    @Test
     void verifyPrintsCurrentStatusAndExplanation() {
         AtomicInteger calls = new AtomicInteger();
         var passport = PassportTestFixtures.passport(PassportStatus.CURRENT);

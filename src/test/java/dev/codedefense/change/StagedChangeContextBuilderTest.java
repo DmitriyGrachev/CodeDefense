@@ -13,200 +13,124 @@ import dev.codedefense.domain.StagedChangeFile;
 import dev.codedefense.domain.StagedFileStatus;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class StagedChangeContextBuilderTest {
     private static final Path ROOT = Path.of("C:/workspace/demo").toAbsolutePath().normalize();
 
     @Test
-    void buildsBoundedRedactedContextFromIndexBlobsOnly() {
-        CapturedStagedChange captured = captured(List.of(
-                blob("src/Main.java", StagedFileStatus.MODIFIED,
-                        "password=TOPSECRET\npublic class Main { String text = \"staged\"; }\n",
-                        "public class Main { String text = \"base\"; }\n"),
-                blob("README.md", StagedFileStatus.ADDED, "# Staged README\n", null),
-                blob("src/Deleted.java", StagedFileStatus.DELETED, null, "class Deleted {}\n")));
+    void rendersTheActualLargeFileHunkInsteadOfAnUnrelatedBlobPrefix() {
+        StagedHunk hunk = hunk("src/LargeService.java", StagedFileStatus.MODIFIED, 1497, 7, 1497, 8,
+                " contextBefore1();\n contextBefore2();\n contextBefore3();\n"
+                        + "-nearbyContext();\n+nearbyContext();\n+changedLine();\n"
+                        + " contextAfter1();\n contextAfter2();\n contextAfter3();");
 
-        ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
-                .build(captured);
+        ProjectSnapshot snapshot = builder(10_000, 2_000).build(captured(List.of(hunk)));
 
-        assertTrue(snapshot.promptContent().contains("INDEX_FILE: src/Main.java"));
-        assertTrue(snapshot.promptContent().contains("HEAD_FILE: src/Main.java"));
-        assertTrue(snapshot.promptContent().contains("STATUS: MODIFIED"));
-        assertTrue(snapshot.promptContent().contains("1 | password=[REDACTED]"));
-        assertFalse(snapshot.promptContent().contains("TOPSECRET"));
-        assertFalse(snapshot.promptContent().contains("UNSTAGED_WORKTREE_SENTINEL"));
-        assertEquals(1, snapshot.redactionCount());
-        assertEquals(List.of(Path.of("README.md"), Path.of("src/Main.java")),
-                snapshot.selectedFiles().stream().map(ProjectSnapshot.SelectedFile::relativePath).toList());
-        assertFalse(snapshot.selectedFiles().stream().map(ProjectSnapshot.SelectedFile::relativePath)
-                .anyMatch(path -> path.toString().contains("Deleted")));
+        assertTrue(snapshot.promptContent().contains("STAGED_HUNK: src/LargeService.java"));
+        assertTrue(snapshot.promptContent().contains("NEW_LINES: 1497-1504"));
+        assertTrue(snapshot.promptContent().contains("changedLine();"));
+        assertTrue(snapshot.promptContent().contains("nearbyContext();"));
+        assertFalse(snapshot.promptContent().contains("UNRELATED_PREFIX_ONLY_DATA"));
+        assertTrue(snapshot.selectedFiles().getFirst().containsEvidence(1497, 1504));
+        assertFalse(snapshot.selectedFiles().getFirst().containsEvidence(1, 2));
     }
 
     @Test
-    void appliesDeterministicLimitsUnicodeLineNumbersAndFinalSeparators() {
-        List<IndexBlob> blobs = new ArrayList<>();
-        for (int index = 0; index < 31; index++) {
-            blobs.add(blob("src/File%02d.java".formatted(index), StagedFileStatus.ADDED,
-                    "class File%02d { String value = \"кириллица 😀 ".formatted(index)
-                            + "x".repeat(200) + "\"; }\n", null));
-        }
-        CodeDefenseConfig config = new CodeDefenseConfig(30, 10_000, 180);
-        ProjectSnapshot snapshot = new StagedChangeContextBuilder(config).build(captured(blobs));
+    void buildsADeleteOnlySnapshotFromHeadHunkEvidence() {
+        StagedHunk hunk = hunk("src/RemovedService.java", StagedFileStatus.DELETED, 7, 2, 0, 0,
+                "-removedService();\n-oldContext();");
+
+        ProjectSnapshot snapshot = builder(10_000, 2_000).build(captured(List.of(hunk)));
+
+        assertEquals(1, snapshot.selectedFiles().size());
+        assertTrue(snapshot.promptContent().contains("HEAD_HUNK: src/RemovedService.java"));
+        assertTrue(snapshot.promptContent().contains("EVIDENCE_STATE: DELETED_FROM_INDEX"));
+        assertTrue(snapshot.selectedFiles().getFirst().containsEvidence(7, 8));
+    }
+
+    @Test
+    void redactsOnlySecretsInSelectedHunkBlocks() {
+        StagedHunk hunk = hunk("src/App.java", StagedFileStatus.ADDED, 0, 0, 1, 1,
+                "+password=TOPSECRET");
+
+        ProjectSnapshot snapshot = builder(10_000, 2_000).build(captured(List.of(hunk)));
+
+        assertTrue(snapshot.promptContent().contains("password=[REDACTED]"));
+        assertFalse(snapshot.promptContent().contains("TOPSECRET"));
+        assertEquals(1, snapshot.redactionCount());
+    }
+
+    @Test
+    void appliesSelectionAndByteLimitsToHunkBlocks() {
+        List<StagedHunk> hunks = java.util.stream.IntStream.range(0, 31)
+                .mapToObj(index -> hunk("src/File%02d.java".formatted(index), StagedFileStatus.ADDED,
+                        0, 0, 1, 1, "+class File%02d { String value = \"%s\"; }".formatted(index, "x".repeat(400))))
+                .toList();
+        CodeDefenseConfig config = new CodeDefenseConfig(30, 20_000, 300);
+
+        ProjectSnapshot snapshot = new StagedChangeContextBuilder(config).build(captured(hunks));
 
         assertEquals(30, snapshot.selectedFiles().size());
-        assertEquals(snapshot.selectedFiles().stream().map(ProjectSnapshot.SelectedFile::relativePath).sorted().toList(),
-                snapshot.selectedFiles().stream().map(ProjectSnapshot.SelectedFile::relativePath).toList());
         assertTrue(snapshot.selectedFiles().stream().allMatch(ProjectSnapshot.SelectedFile::truncated));
         assertTrue(snapshot.selectedFiles().stream().allMatch(file -> file.renderedBytes() <= config.maximumFileBlockBytes()));
         assertTrue(snapshot.promptBytes() <= config.maximumSnapshotBytes());
-        assertFalse(snapshot.promptContent().contains("\uFFFD"));
-        assertTrue(snapshot.promptContent().contains("1 | class File00"));
     }
 
     @Test
-    void rejectsChangeWithNoEligibleCurrentStagedText() {
-        CapturedStagedChange captured = captured(List.of(
-                blob("src/Deleted.java", StagedFileStatus.DELETED, null, "class Deleted {}\n"),
-                blob("private.key", StagedFileStatus.ADDED, "secret", null)));
+    void excludesUnsupportedAndExcludedPathsBeforePromptConstruction() {
+        StagedHunk accepted = hunk("src/App.java", StagedFileStatus.ADDED, 0, 0, 1, 1, "+class App {}");
+        StagedHunk excluded = hunk("node_modules/Dependency.java", StagedFileStatus.ADDED, 0, 0, 1, 1,
+                "+DEPENDENCY_SECRET");
+        StagedHunk unsupported = hunk("image.png", StagedFileStatus.ADDED, 0, 0, 1, 1, "+BINARY_SENTINEL");
 
-        assertThrows(EmptyProjectSnapshotException.class,
-                () -> new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024)).build(captured));
+        ProjectSnapshot snapshot = builder(10_000, 2_000).build(captured(List.of(accepted, excluded, unsupported)));
+
+        assertEquals(List.of(Path.of("src/App.java")),
+                snapshot.selectedFiles().stream().map(ProjectSnapshot.SelectedFile::relativePath).toList());
+        assertFalse(snapshot.promptContent().contains("DEPENDENCY_SECRET"));
+        assertFalse(snapshot.promptContent().contains("BINARY_SENTINEL"));
     }
 
     @Test
-    void rendersOnlySafeStagedChangePreviewMetadata() {
-        CapturedStagedChange captured = captured(List.of(
-                blob("src/Main.java", StagedFileStatus.MODIFIED, "class Main {}\n", "class Base {}\n"),
-                blob("src/Old.java", StagedFileStatus.DELETED, null, "class Old {}\n")));
-        ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
-                .build(captured);
+    void rejectsChangesWithNoEligibleHunkEvidence() {
+        StagedHunk unsupported = hunk("image.png", StagedFileStatus.ADDED, 0, 0, 1, 1, "+not source");
+
+        assertThrows(EmptyProjectSnapshotException.class, () -> builder(10_000, 2_000).build(captured(List.of(unsupported))));
+    }
+
+    @Test
+    void rendersOnlySafePreviewMetadata() {
+        StagedHunk hunk = hunk("src/App.java", StagedFileStatus.ADDED, 0, 0, 1, 1, "+class App {}");
+        ProjectSnapshot snapshot = builder(10_000, 2_000).build(captured(List.of(hunk)));
         StringWriter text = new StringWriter();
 
-        new StagedChangePreviewRenderer(new CodeDefenseConfig(30, 4_096, 1_024))
-                .render(captured.change(), snapshot, new PrintWriter(text));
+        new StagedChangePreviewRenderer(new CodeDefenseConfig(30, 10_000, 2_000))
+                .render(captured(List.of(hunk)).change(), snapshot, new PrintWriter(text));
 
         assertTrue(text.toString().contains("Mode: Staged change"));
-        assertTrue(text.toString().contains("Unstaged working-tree content ignored: yes"));
-        assertTrue(text.toString().contains("Selected-file limit: 30"));
-        assertTrue(text.toString().contains("src/Main.java"));
-        assertFalse(text.toString().contains("class Main"));
+        assertTrue(text.toString().contains("Index identity:"));
+        assertFalse(text.toString().contains("class App"));
         assertFalse(text.toString().contains(ROOT.toString()));
     }
 
-    @Test
-    void usesMetadataOnlyCanonicalDiffPrefix() {
-        CapturedStagedChange captured = captured(List.of(
-                blob("src/Main.java", StagedFileStatus.ADDED, "class Main {}\n", null)));
-
-        ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
-                .build(captured);
-
-        assertTrue(snapshot.promptContent().contains("diff --staged src/Main.java"));
-        assertFalse(snapshot.promptContent().contains("TOPSECRET"));
-        assertFalse(snapshot.promptContent().contains("[REDACTED]"));
-        assertEquals(0, snapshot.redactionCount());
+    private static StagedChangeContextBuilder builder(int snapshotBytes, int blockBytes) {
+        return new StagedChangeContextBuilder(new CodeDefenseConfig(30, snapshotBytes, blockBytes));
     }
 
-    @Test
-    void reservesTheDiffPrefixFinalNewlineAtTheTightByteBoundary() {
-        StagedChangeContextBuilder builder = new StagedChangeContextBuilder(new CodeDefenseConfig(1, 10, 1));
-        StringBuilder prompt = new StringBuilder("x".repeat(9));
-
-        builder.appendDiffPrefix(prompt, "secret");
-
-        assertEquals(10, prompt.toString().getBytes(StandardCharsets.UTF_8).length);
-        assertTrue(prompt.toString().endsWith("\n"));
-    }
-
-    @Test
-    void countsOnlyRedactionMarkersThatFitInsideAnIncludedFileBlock() {
-        CapturedStagedChange captured = captured(List.of(
-                blob("src/Main.java", StagedFileStatus.ADDED,
-                        "x".repeat(500) + "\npassword=TOPSECRET\n", null)));
-
-        ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 180))
-                .build(captured);
-
-        assertTrue(snapshot.selectedFiles().getFirst().truncated());
-        assertFalse(snapshot.promptContent().contains("TOPSECRET"));
-        assertFalse(snapshot.promptContent().contains("[REDACTED]"));
-        assertEquals(0, snapshot.redactionCount());
-    }
-
-    @Test
-    void excludesSupportedFilesBelowExcludedDirectories() {
-        CapturedStagedChange captured = captured(List.of(
-                blob("src/Main.java", StagedFileStatus.ADDED, "class Main {}\n", null),
-                blob("node_modules/Dependency.java", StagedFileStatus.ADDED,
-                        "UNTRUSTED_DEPENDENCY_SENTINEL\n", null)));
-
-        ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
-                .build(captured);
-
-        assertEquals(List.of(Path.of("src/Main.java")),
-                snapshot.selectedFiles().stream().map(ProjectSnapshot.SelectedFile::relativePath).toList());
-        assertFalse(snapshot.promptContent().contains("UNTRUSTED_DEPENDENCY_SENTINEL"));
-    }
-
-    @Test
-    void excludesIneligibleCanonicalDiffContentFromThePrompt() {
-        CapturedStagedChange captured = captured(List.of(
-                blob("src/Main.java", StagedFileStatus.ADDED, "class Main {}\n", null),
-                blob("private.key", StagedFileStatus.ADDED, "-----BEGIN PRIVATE KEY-----\nKEY_SECRET_SENTINEL\n", null),
-                blob("node_modules/Dependency.java", StagedFileStatus.ADDED,
-                        "NODE_MODULES_SECRET_SENTINEL\n", null)));
-
-        ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
-                .build(captured);
-
-        assertFalse(snapshot.promptContent().contains("BEGIN PRIVATE KEY"));
-        assertFalse(snapshot.promptContent().contains("KEY_SECRET_SENTINEL"));
-        assertFalse(snapshot.promptContent().contains("NODE_MODULES_SECRET_SENTINEL"));
-        assertTrue(snapshot.promptContent().contains("CANONICAL_DIFF:"));
-    }
-
-    @Test
-    void ignoresUnlistedAndDeletedBlobContentButKeepsDeclaredDeletionMetadata() {
-        IndexBlob main = blob("src/Main.java", StagedFileStatus.ADDED, "class Main {}\n", null);
-        IndexBlob deleted = blob("src/Deleted.java", StagedFileStatus.DELETED,
-                "DELETED_INDEX_SENTINEL\n", "class Deleted {}\n");
-        IndexBlob unlisted = blob("src/Injected.java", StagedFileStatus.ADDED,
-                "UNLISTED_INDEX_SENTINEL\n", null);
-        CapturedStagedChange captured = capturedWithDeclaredFiles(List.of(main.file(), deleted.file()),
-                List.of(main, deleted, unlisted));
-
-        ProjectSnapshot snapshot = new StagedChangeContextBuilder(new CodeDefenseConfig(30, 4_096, 1_024))
-                .build(captured);
-
-        assertEquals(List.of(Path.of("src/Main.java")),
-                snapshot.selectedFiles().stream().map(ProjectSnapshot.SelectedFile::relativePath).toList());
-        assertFalse(snapshot.promptContent().contains("DELETED_INDEX_SENTINEL"));
-        assertFalse(snapshot.promptContent().contains("UNLISTED_INDEX_SENTINEL"));
-        assertTrue(snapshot.promptContent().contains("diff --staged src/Deleted.java\nstatus: DELETED"));
-    }
-
-    private static CapturedStagedChange captured(List<IndexBlob> blobs) {
-        List<StagedChangeFile> files = blobs.stream().map(IndexBlob::file)
+    private static CapturedStagedChange captured(List<StagedHunk> hunks) {
+        List<StagedChangeFile> files = hunks.stream().map(StagedHunk::file)
                 .sorted(java.util.Comparator.comparing(file -> file.path().toString())).toList();
-        return capturedWithDeclaredFiles(files, blobs);
+        return new CapturedStagedChange(new StagedChange(ROOT, "a".repeat(64), "b".repeat(40), "c".repeat(64),
+                "d".repeat(64), files, 1, 1), hunks);
     }
 
-    private static CapturedStagedChange capturedWithDeclaredFiles(List<StagedChangeFile> files, List<IndexBlob> blobs) {
-        List<StagedChangeFile> sortedFiles = files.stream()
-                .sorted(java.util.Comparator.comparing(file -> file.path().toString())).toList();
-        return new CapturedStagedChange(new StagedChange(ROOT, "a".repeat(64), "b".repeat(40), "c".repeat(40),
-                "d".repeat(64), sortedFiles, 8, 3), blobs);
-    }
-
-    private static IndexBlob blob(String path, StagedFileStatus status, String index, String base) {
-        StagedChangeFile file = new StagedChangeFile(Path.of(path), status, index == null ? 0 : 1,
-                base == null ? 0 : 1);
-        return new IndexBlob(file, Optional.ofNullable(index), false, Optional.ofNullable(base), false);
+    private static StagedHunk hunk(String path, StagedFileStatus status, int oldStart, int oldCount,
+            int newStart, int newCount, String content) {
+        StagedChangeFile file = new StagedChangeFile(Path.of(path), status,
+                status == StagedFileStatus.DELETED ? 0 : newCount, oldCount);
+        return new StagedHunk(file, oldStart, oldCount, newStart, newCount, content, false);
     }
 }

@@ -72,6 +72,20 @@ class FileSystemChangePassportStoreTest {
     }
 
     @Test
+    void readsLegacyTreeMetadataAsAnExpiredOnlyIdentity() throws Exception {
+        ChangePassportPaths paths = preparedPaths();
+        Path artifact = paths.passportsDirectory().resolve("legacy.md");
+        String markdown = "<!-- codedefense-change-passport:v1;root=" + "a".repeat(64)
+                + ";base=" + "b".repeat(40) + ";tree=" + "c".repeat(40) + ";diff=" + "d".repeat(64)
+                + ";paths=" + StoredPassportIdentity.pathHash(Path.of("src/App.java"))
+                + ";timestamp=2026-07-18T00:00:00Z -->\n";
+        Files.writeString(artifact, markdown);
+        Files.writeString(paths.latestPointer(), artifact.toAbsolutePath() + "\n");
+
+        assertTrue(store(paths).readLatestIdentity().isPresent());
+    }
+
+    @Test
     void rejectsFinalAndIntermediateSymlinksWhenPlatformSupportsThem() throws Exception {
         ChangePassportPaths paths = preparedPaths();
         Path outside = Files.createDirectory(directory.resolve("outside"));

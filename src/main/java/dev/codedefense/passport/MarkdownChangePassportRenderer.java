@@ -18,7 +18,7 @@ public final class MarkdownChangePassportRenderer {
         line(markdown, "# CodeDefense Change Passport"); line(markdown, "");
         line(markdown, "## Change identity");
         line(markdown, "- Base commit: " + passport.change().baseCommit());
-        line(markdown, "- Index tree: " + passport.change().indexTree());
+        line(markdown, "- Index identity: " + passport.change().indexIdentity());
         line(markdown, "- Diff fingerprint: " + passport.change().diffFingerprint());
         line(markdown, "- Created at: " + DateTimeFormatter.ISO_INSTANT.format(passport.createdAt())); line(markdown, "");
         line(markdown, "## Status"); line(markdown, "- Status at creation: " + passport.statusAtCreation());
@@ -40,7 +40,7 @@ public final class MarkdownChangePassportRenderer {
     }
     String metadata(ChangePassport passport) {
         StoredPassportIdentity identity = StoredPassportIdentity.from(passport, java.nio.file.Path.of("passport.md").toAbsolutePath());
-        return METADATA_PREFIX + "root=" + identity.repositoryIdentityHash() + ";base=" + identity.baseCommit() + ";tree=" + identity.indexTree()
+        return METADATA_PREFIX + "root=" + identity.repositoryIdentityHash() + ";base=" + identity.baseCommit() + ";index=" + identity.indexIdentity()
                 + ";diff=" + identity.diffFingerprint() + ";paths=" + String.join(",", identity.changedPathHashes())
                 + ";timestamp=" + DateTimeFormatter.ISO_INSTANT.format(identity.createdAt()) + " -->";
     }
@@ -48,12 +48,23 @@ public final class MarkdownChangePassportRenderer {
         line(markdown, "## " + headingFor(result.question().id()));
         line(markdown, "- Question: " + MarkdownTextEscaper.inline(result.question().prompt()));
         line(markdown, "- Evidence: " + evidence(result.question().evidence()));
+        appendEvaluation(markdown, "### Primary evaluation", result.primaryTurn(), false);
+        result.followUpTurn().ifPresent(turn -> appendEvaluation(markdown, "### Follow-up evaluation", turn, true));
         line(markdown, "- Local final score: " + result.finalScore() + "/100");
-        line(markdown, "- Verdict: " + MarkdownTextEscaper.inline(result.primaryTurn().evaluation().verdict().name()));
-        line(markdown, "- Feedback: " + MarkdownTextEscaper.inline(result.primaryTurn().evaluation().feedback()));
-        line(markdown, "- Understood concepts: " + concepts(result.primaryTurn().evaluation().understoodConcepts()));
-        line(markdown, "- Knowledge gaps: " + concepts(result.primaryTurn().evaluation().missingConcepts()));
         line(markdown, "");
+    }
+
+    private static void appendEvaluation(StringBuilder markdown, String heading,
+            dev.codedefense.domain.InterviewTurn turn, boolean includeQuestion) {
+        line(markdown, heading);
+        if (includeQuestion) {
+            line(markdown, "- Question: " + MarkdownTextEscaper.inline(turn.prompt()));
+        }
+        line(markdown, "- Verdict: " + MarkdownTextEscaper.inline(turn.evaluation().verdict().name()));
+        line(markdown, "- Score: " + turn.evaluation().score() + "/100");
+        line(markdown, "- Feedback: " + MarkdownTextEscaper.inline(turn.evaluation().feedback()));
+        line(markdown, "- Understood concepts: " + concepts(turn.evaluation().understoodConcepts()));
+        line(markdown, "- Knowledge gaps: " + concepts(turn.evaluation().missingConcepts()));
     }
     private static String headingFor(String questionId) {
         return switch (questionId) {

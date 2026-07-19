@@ -19,9 +19,10 @@ public final class VerifyLatestChangePassportUseCase {
                 matches(identity, source.captureIdentity(repositoryPath)) ? PassportStatus.CURRENT : PassportStatus.EXPIRED));
     }
     private static boolean matches(StoredPassportIdentity identity, StagedChangeIdentity change) {
-        return identity.repositoryIdentityHash().equals(change.repositoryIdentityHash())
+        return !identity.legacyIndexTree()
+                && identity.repositoryIdentityHash().equals(change.repositoryIdentityHash())
                 && identity.baseCommit().equals(change.baseCommit())
-                && identity.indexTree().equals(change.indexTree())
+                && identity.indexIdentity().equals(change.indexIdentity())
                 && identity.diffFingerprint().equals(change.diffFingerprint())
                 && identity.changedPathHashes().equals(change.changedPathHashes())
                 && change.hasStagedChanges();

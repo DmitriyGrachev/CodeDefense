@@ -23,7 +23,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Captures changed objects directly from Git's index and HEAD. No changed path is ever resolved
@@ -32,34 +33,36 @@ import java.util.Optional;
 public final class GitCliStagedChangeSource implements StagedChangeSource {
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
     private static final Duration TERMINATION_GRACE_PERIOD = Duration.ofSeconds(1);
-    private static final int DEFAULT_MAXIMUM_BLOB_BYTES = 24 * 1024;
+    private static final int DEFAULT_MAXIMUM_HUNK_BYTES = 24 * 1024;
     private static final int DEFAULT_MAXIMUM_DIFF_BYTES = 120 * 1024;
     private static final String ZERO_OBJECT_ID = "0".repeat(40);
+    private static final Pattern HUNK_HEADER = Pattern.compile(
+            "@@ -(\\d+)(?:,(\\d+))? \\+(\\d+)(?:,(\\d+))? @@.*");
 
     private final ProcessExecutor processExecutor;
     private final ProjectFileFilter fileFilter;
-    private final int maximumBlobBytes;
+    private final int maximumHunkBytes;
     private final int maximumDiffBytes;
 
     public GitCliStagedChangeSource(ProcessExecutor processExecutor) {
-        this(processExecutor, new ProjectFileFilter(), DEFAULT_MAXIMUM_BLOB_BYTES, DEFAULT_MAXIMUM_DIFF_BYTES);
+        this(processExecutor, new ProjectFileFilter(), DEFAULT_MAXIMUM_HUNK_BYTES, DEFAULT_MAXIMUM_DIFF_BYTES);
     }
 
-    GitCliStagedChangeSource(ProcessExecutor processExecutor, int maximumBlobBytes, int maximumDiffBytes) {
-        this(processExecutor, new ProjectFileFilter(), maximumBlobBytes, maximumDiffBytes);
+    GitCliStagedChangeSource(ProcessExecutor processExecutor, int maximumHunkBytes, int maximumDiffBytes) {
+        this(processExecutor, new ProjectFileFilter(), maximumHunkBytes, maximumDiffBytes);
     }
 
     GitCliStagedChangeSource(
             ProcessExecutor processExecutor,
             ProjectFileFilter fileFilter,
-            int maximumBlobBytes,
+            int maximumHunkBytes,
             int maximumDiffBytes) {
         this.processExecutor = Objects.requireNonNull(processExecutor, "processExecutor");
         this.fileFilter = Objects.requireNonNull(fileFilter, "fileFilter");
-        if (maximumBlobBytes <= 0 || maximumDiffBytes <= 0) {
+        if (maximumHunkBytes <= 0 || maximumDiffBytes <= 0) {
             throw new IllegalArgumentException("Git capture limits must be positive");
         }
-        this.maximumBlobBytes = maximumBlobBytes;
+        this.maximumHunkBytes = maximumHunkBytes;
         this.maximumDiffBytes = maximumDiffBytes;
     }
 
@@ -93,28 +96,18 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                 root,
                 capturedIndex.identity().repositoryIdentityHash(),
                 capturedIndex.identity().baseCommit(),
-                capturedIndex.identity().indexTree(),
+                capturedIndex.identity().indexIdentity(),
                 capturedIndex.identity().diffFingerprint(),
                 changedFiles,
                 addedLines,
                 deletedLines);
 
-        List<IndexBlob> blobs = new ArrayList<>();
-        for (EntryWithFile value : files) {
-            if (!isEligible(value)) {
-                continue;
-            }
-            Optional<DecodedBlob> index = readBlob(root, value.entry().newObjectId());
-            Optional<DecodedBlob> base = readBlob(root, value.entry().oldObjectId());
-            if (index.isEmpty() && base.isEmpty()) {
-                continue;
-            }
-            blobs.add(new IndexBlob(
-                    value.file(),
-                    index.map(DecodedBlob::content), index.map(DecodedBlob::truncated).orElse(false),
-                    base.map(DecodedBlob::content), base.map(DecodedBlob::truncated).orElse(false)));
+        List<EntryWithFile> eligible = files.stream().filter(this::isEligible).toList();
+        List<StagedHunk> hunks = new ArrayList<>();
+        for (EntryWithFile value : eligible) {
+            hunks.addAll(readHunks(root, value.file()));
         }
-        return new CapturedStagedChange(change, blobs);
+        return new CapturedStagedChange(change, hunks);
     }
 
     @Override
@@ -126,18 +119,23 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
         Path requestedRoot = normalizeDirectory(requestedPath);
         Path root = resolveRepositoryRoot(requestedRoot);
         String baseCommit = requiredText(run(root, 256, "rev-parse", "--verify", "HEAD"));
-        String indexTree = requiredText(run(root, 256, "write-tree"));
         requireObjectId(baseCommit);
-        requireObjectId(indexTree);
         List<RawEntry> rawEntries = parseRaw(requiredBytes(run(root, maximumDiffBytes,
                 "diff", "--cached", "--no-ext-diff", "--no-textconv", "--raw", "-z", "--no-abbrev",
                 "--find-renames=100%")));
+        String canonicalEntries = rawEntries.stream()
+                .sorted(Comparator.comparing(entry -> portable(entry.path())))
+                .map(entry -> entry.oldMode() + "\0" + entry.newMode() + "\0"
+                        + entry.oldObjectId() + "\0" + entry.newObjectId() + "\0"
+                        + entry.status() + "\0" + portable(entry.oldPath()) + "\0" + portable(entry.path()))
+                .collect(java.util.stream.Collectors.joining("\0"));
+        String indexIdentity = sha256("codedefense-index-v1\0" + baseCommit + "\0" + canonicalEntries);
         StagedChangeIdentity identity = new StagedChangeIdentity(
                 root,
                 sha256(root.toString()),
                 baseCommit,
-                indexTree,
-                sha256("codedefense-staged-change-v1\0" + baseCommit + "\0" + indexTree),
+                indexIdentity,
+                sha256("codedefense-staged-change-v2\0" + baseCommit + "\0" + canonicalEntries),
                 rawEntries.stream().map(RawEntry::path).map(StagedChangeIdentity::pathHash).sorted().toList());
         return new CapturedIndex(root, rawEntries, identity);
     }
@@ -188,22 +186,10 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
             }
             throw new GitChangeException(GitChangeException.Kind.EXECUTION_FAILED);
         }
-        if (result.stdoutTruncated() && !isBlobCommand(arguments)) {
+        if (result.stdoutTruncated() && !isHunkCommand(arguments)) {
             throw new GitChangeException(GitChangeException.Kind.EXECUTION_FAILED);
         }
         return result;
-    }
-
-    private Optional<DecodedBlob> readBlob(Path root, String objectId) {
-        if (isZeroObjectId(objectId)) {
-            return Optional.empty();
-        }
-        ProcessResult result = run(root, maximumBlobBytes, "cat-file", "blob", objectId);
-        byte[] bytes = result.stdoutBytes();
-        if (containsNul(bytes)) {
-            return Optional.empty();
-        }
-        return Optional.of(new DecodedBlob(decodeBlob(bytes, result.stdoutTruncated()), result.stdoutTruncated()));
     }
 
     private boolean isEligible(EntryWithFile value) {
@@ -223,8 +209,65 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
         return false;
     }
 
-    private static boolean isBlobCommand(String[] arguments) {
-        return arguments.length >= 2 && arguments[0].equals("cat-file") && arguments[1].equals("blob");
+    private static boolean isHunkCommand(String[] arguments) {
+        return arguments.length >= 2 && arguments[0].equals("diff") && arguments[1].equals("--cached")
+                && java.util.Arrays.asList(arguments).contains("--unified=3");
+    }
+
+    private List<StagedHunk> readHunks(Path root, StagedChangeFile file) {
+        ProcessResult result = run(root, maximumHunkBytes,
+                "diff", "--cached", "--no-ext-diff", "--no-textconv", "--unified=3", "--no-color", "--",
+                portable(file.path()));
+        return parseHunks(file, decodeCommandText(result.stdoutBytes(), result.stdoutTruncated()), result.stdoutTruncated());
+    }
+
+    private static List<StagedHunk> parseHunks(StagedChangeFile file, String output, boolean truncated) {
+        String complete = output;
+        if (truncated) {
+            int lastNewline = complete.lastIndexOf('\n');
+            complete = lastNewline < 0 ? "" : complete.substring(0, lastNewline + 1);
+        }
+        List<StagedHunk> parsed = new ArrayList<>();
+        ParsedHunk current = null;
+        for (String line : complete.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1)) {
+            Matcher matcher = HUNK_HEADER.matcher(line);
+            if (matcher.matches()) {
+                if (current != null) {
+                    parsed.add(current.toHunk(file, truncated));
+                }
+                current = new ParsedHunk(
+                        parseHunkNumber(matcher.group(1)), parseHunkCount(matcher.group(2)),
+                        parseHunkNumber(matcher.group(3)), parseHunkCount(matcher.group(4)));
+                continue;
+            }
+            if (current == null) {
+                continue;
+            }
+            if (line.startsWith(" ") || line.startsWith("+") || line.startsWith("-")) {
+                current.append(line);
+                continue;
+            }
+            if (line.equals("\\ No newline at end of file") || line.isEmpty()) {
+                continue;
+            }
+            throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
+        }
+        if (current != null) {
+            parsed.add(current.toHunk(file, truncated));
+        }
+        return List.copyOf(parsed);
+    }
+
+    private static int parseHunkNumber(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException exception) {
+            throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
+        }
+    }
+
+    private static int parseHunkCount(String value) {
+        return value == null ? 1 : parseHunkNumber(value);
     }
 
     private static String requiredText(ProcessResult result) {
@@ -253,10 +296,6 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
             }
             return new String(bytes, StandardCharsets.ISO_8859_1);
         }
-    }
-
-    private static String decodeBlob(byte[] bytes, boolean truncated) {
-        return decodeCommandText(bytes, truncated);
     }
 
     private static String decodeUtf8(byte[] bytes, int length) throws CharacterCodingException {
@@ -289,7 +328,7 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                 path = safePath(fields.get(index++));
             }
             entries.add(new RawEntry(parsed.oldMode(), parsed.newMode(), parsed.oldObjectId(), parsed.newObjectId(),
-                    parsed.status(), path));
+                    parsed.status(), oldPath, path));
         }
         return entries;
     }
@@ -408,15 +447,6 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
         return objectId.matches("0{40,64}");
     }
 
-    private static boolean containsNul(byte[] bytes) {
-        for (byte value : bytes) {
-            if (value == 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static String portable(Path path) {
         return path.toString().replace('\\', '/');
     }
@@ -434,7 +464,13 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
     }
 
     private record RawEntry(
-            String oldMode, String newMode, String oldObjectId, String newObjectId, StagedFileStatus status, Path path) {
+            String oldMode,
+            String newMode,
+            String oldObjectId,
+            String newObjectId,
+            StagedFileStatus status,
+            Path oldPath,
+            Path path) {
         private boolean isEligibleRegularFile() {
             if (oldMode.equals("120000") || newMode.equals("120000")
                     || oldMode.equals("160000") || newMode.equals("160000")) {
@@ -457,6 +493,46 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
     private record CapturedIndex(Path root, List<RawEntry> rawEntries, StagedChangeIdentity identity) {
     }
 
-    private record DecodedBlob(String content, boolean truncated) {
+    private static final class ParsedHunk {
+        private final int oldStartLine;
+        private final int oldLineCount;
+        private final int newStartLine;
+        private final int newLineCount;
+        private final StringBuilder content = new StringBuilder();
+        private int oldLinesSeen;
+        private int newLinesSeen;
+
+        private ParsedHunk(int oldStartLine, int oldLineCount, int newStartLine, int newLineCount) {
+            this.oldStartLine = oldStartLine;
+            this.oldLineCount = oldLineCount;
+            this.newStartLine = newStartLine;
+            this.newLineCount = newLineCount;
+        }
+
+        private void append(String line) {
+            switch (line.charAt(0)) {
+                case ' ' -> {
+                    oldLinesSeen++;
+                    newLinesSeen++;
+                }
+                case '-' -> oldLinesSeen++;
+                case '+' -> newLinesSeen++;
+                default -> throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
+            }
+            if (oldLinesSeen > oldLineCount || newLinesSeen > newLineCount) {
+                throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
+            }
+            content.append(line).append('\n');
+        }
+
+        private StagedHunk toHunk(StagedChangeFile file, boolean truncated) {
+            if (content.isEmpty()
+                    || (!truncated && (oldLinesSeen != oldLineCount || newLinesSeen != newLineCount))) {
+                throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
+            }
+            content.setLength(content.length() - 1);
+            return new StagedHunk(file, oldStartLine, oldLineCount, newStartLine, newLineCount,
+                    content.toString(), truncated);
+        }
     }
 }

@@ -10,7 +10,7 @@ public record StagedChange(
         Path repositoryRoot,
         String repositoryIdentityHash,
         String baseCommit,
-        String indexTree,
+        String indexIdentity,
         String diffFingerprint,
         List<StagedChangeFile> files,
         int addedLines,
@@ -25,7 +25,7 @@ public record StagedChange(
         }
         repositoryIdentityHash = requireMatch(repositoryIdentityHash, SHA_256_PATTERN, "repositoryIdentityHash");
         baseCommit = requireMatch(baseCommit, GIT_ID_PATTERN, "baseCommit");
-        indexTree = requireMatch(indexTree, GIT_ID_PATTERN, "indexTree");
+        indexIdentity = requireMatch(indexIdentity, SHA_256_PATTERN, "indexIdentity");
         diffFingerprint = requireMatch(diffFingerprint, SHA_256_PATTERN, "diffFingerprint");
         Objects.requireNonNull(files, "files");
         files = List.copyOf(files);
@@ -60,8 +60,8 @@ public record StagedChange(
 
     @Override
     public String toString() {
-        return "StagedChange[repositoryRoot=%s, repositoryIdentityHash=%s, baseCommit=%s, indexTree=%s, diffFingerprint=%s, fileCount=%d, addedLines=%d, deletedLines=%d]"
-                .formatted(repositoryRoot, repositoryIdentityHash, baseCommit, indexTree, diffFingerprint,
+        return "StagedChange[repositoryRoot=%s, repositoryIdentityHash=%s, baseCommit=%s, indexIdentity=%s, diffFingerprint=%s, fileCount=%d, addedLines=%d, deletedLines=%d]"
+                .formatted(repositoryRoot, repositoryIdentityHash, baseCommit, indexIdentity, diffFingerprint,
                         files.size(), addedLines, deletedLines);
     }
 }

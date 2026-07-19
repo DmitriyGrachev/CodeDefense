@@ -14,7 +14,7 @@ class StagedChangeIdentityTest {
                 Path.of(".").toAbsolutePath().normalize(),
                 "a".repeat(64),
                 "b".repeat(40),
-                "c".repeat(40),
+                "c".repeat(64),
                 "d".repeat(64),
                 List.of());
 

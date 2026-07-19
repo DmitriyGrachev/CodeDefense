@@ -31,7 +31,7 @@ public final class StagedChangePreviewRenderer {
         out.println("Repository: " + snapshot.projectName());
         out.println("Mode: Staged change");
         out.println("Base commit: " + shortId(change.baseCommit()));
-        out.println("Index tree: " + shortId(change.indexTree()));
+        out.println("Index identity: " + shortId(change.indexIdentity()));
         out.println("Fingerprint: " + shortId(change.diffFingerprint()));
         out.println("Changed: " + changed + ", added: " + added + ", deleted: " + deleted);
         out.println("Unstaged working-tree content ignored: yes");

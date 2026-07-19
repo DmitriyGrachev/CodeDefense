@@ -91,7 +91,7 @@ CodeDefense reads staged Git objects and ignores unstaged working-tree content. 
 
 The staged defense asks exactly three categories of question: **Decision**, **Counterfactual**, and **Test prediction**. The existing local scoring and readiness calculation apply. A completed run stores a Markdown-only Change Passport under `<user.home>/.codedefense/change-passports/`; `<user.home>/.codedefense/latest-change-passport.txt` points to the latest artifact. Its fixed Codex session-link state is `NOT_REQUESTED`.
 
-`passport --verify .` is read-only. It reports `CURRENT` when the saved passport matches the staged identity and `EXPIRED` when it does not. If the staged index changes during the interview, the pre-save recapture stores an `EXPIRED` artifact.
+`passport --verify .` is read-only: it does not modify the working tree, Git index, passport artifact, or latest pointer. It derives a deterministic index identity from the base commit and raw staged-index entries without materializing a Git tree object. It reports `CURRENT` when the saved passport matches that identity and `EXPIRED` when it does not. If the staged index changes during the interview, the pre-save recapture stores an `EXPIRED` artifact.
 
 Passports and proof output exclude staged source, diffs, blobs, answers, raw model JSON, expected key points, and evidence reasons. They are educational only and are never approval to merge or deploy. This mode does not add an application server or session matching, HTML or JSON reports, a Skill, browser integration, GitHub/PR/CI/signing/cloud/dashboard integration.
 

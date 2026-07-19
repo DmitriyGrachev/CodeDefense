@@ -1,7 +1,7 @@
 package dev.codedefense.application;
 
 import dev.codedefense.change.CapturedStagedChange;
-import dev.codedefense.change.IndexBlob;
+import dev.codedefense.change.StagedHunk;
 import dev.codedefense.change.StagedChangeContextBuilder;
 import dev.codedefense.change.StagedChangePreviewRenderer;
 import dev.codedefense.cli.ExitCodes;
@@ -161,18 +161,18 @@ class StagedChangeDefenseRunnerTest {
     private CapturedStagedChange captured(Path ignored) {
         Path root = Path.of(".").toAbsolutePath().normalize();
         StagedChangeFile file = new StagedChangeFile(Path.of("src/App.java"), StagedFileStatus.ADDED, 1, 0);
-        StagedChange change = new StagedChange(root, "a".repeat(64), "b".repeat(40), "c".repeat(40),
+        StagedChange change = new StagedChange(root, "a".repeat(64), "b".repeat(40), "c".repeat(64),
                 "d".repeat(64), List.of(file), 1, 0);
         return new CapturedStagedChange(change,
-                List.of(new IndexBlob(file, Optional.of("class App {}\n"), false, Optional.empty(), false)));
+                List.of(new StagedHunk(file, 0, 0, 1, 1, "+class App {}", false)));
     }
 
     private CapturedStagedChange emptyCaptured(Path ignored) {
         Path root = Path.of(".").toAbsolutePath().normalize();
         StagedChangeFile file = new StagedChangeFile(Path.of("image.png"), StagedFileStatus.ADDED, 1, 0);
-        StagedChange change = new StagedChange(root, "a".repeat(64), "b".repeat(40), "c".repeat(40),
+        StagedChange change = new StagedChange(root, "a".repeat(64), "b".repeat(40), "c".repeat(64),
                 "d".repeat(64), List.of(file), 1, 0);
         return new CapturedStagedChange(change,
-                List.of(new IndexBlob(file, Optional.of("not source"), false, Optional.empty(), false)));
+                List.of(new StagedHunk(file, 0, 0, 1, 1, "+not source", false)));
     }
 }

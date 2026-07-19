@@ -12,13 +12,16 @@ import java.util.Objects;
 
 /** Parsed source-free identity envelope for deciding whether a passport is current. */
 public record StoredPassportIdentity(Path passport, String repositoryIdentityHash, String baseCommit,
-        String indexTree, String diffFingerprint, List<String> changedPathHashes, Instant createdAt) {
+        String indexIdentity, String diffFingerprint, List<String> changedPathHashes, Instant createdAt,
+        boolean legacyIndexTree) {
     public StoredPassportIdentity {
         Objects.requireNonNull(passport, "passport");
         passport = passport.toAbsolutePath().normalize();
         repositoryIdentityHash = requireHash(repositoryIdentityHash);
-        baseCommit = requireGitId(baseCommit);
-        indexTree = requireGitId(indexTree);
+        if (baseCommit == null || !baseCommit.matches("[0-9a-f]{40,64}")) {
+            throw new IllegalArgumentException("Invalid base commit");
+        }
+        indexIdentity = requireHash(indexIdentity);
         diffFingerprint = requireHash(diffFingerprint);
         Objects.requireNonNull(changedPathHashes, "changedPathHashes");
         changedPathHashes = List.copyOf(changedPathHashes);
@@ -31,11 +34,17 @@ public record StoredPassportIdentity(Path passport, String repositoryIdentityHas
         Objects.requireNonNull(createdAt, "createdAt");
     }
 
+    public StoredPassportIdentity(Path passport, String repositoryIdentityHash, String baseCommit,
+            String indexIdentity, String diffFingerprint, List<String> changedPathHashes, Instant createdAt) {
+        this(passport, repositoryIdentityHash, baseCommit, indexIdentity, diffFingerprint, changedPathHashes,
+                createdAt, false);
+    }
+
     public static StoredPassportIdentity from(ChangePassport passport, Path path) {
         return new StoredPassportIdentity(path, passport.change().repositoryIdentityHash(), passport.change().baseCommit(),
-                passport.change().indexTree(), passport.change().diffFingerprint(),
+                passport.change().indexIdentity(), passport.change().diffFingerprint(),
                 passport.change().files().stream().map(StagedChangeFile::path).map(StoredPassportIdentity::pathHash).sorted().toList(),
-                passport.createdAt());
+                passport.createdAt(), false);
     }
 
     public static String pathHash(Path path) {
@@ -46,5 +55,4 @@ public record StoredPassportIdentity(Path passport, String repositoryIdentityHas
         catch (NoSuchAlgorithmException exception) { throw new IllegalStateException(exception); }
     }
     private static String requireHash(String value) { if (value == null || !value.matches("[0-9a-f]{64}")) throw new IllegalArgumentException("Invalid identity hash"); return value; }
-    private static String requireGitId(String value) { if (value == null || !value.matches("[0-9a-f]{40,64}")) throw new IllegalArgumentException("Invalid Git object id"); return value; }
 }

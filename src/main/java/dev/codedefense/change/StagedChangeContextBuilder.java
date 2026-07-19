@@ -5,10 +5,10 @@ import dev.codedefense.domain.EmptyProjectSnapshotException;
 import dev.codedefense.domain.ProjectSnapshot;
 import dev.codedefense.domain.ScanSummary;
 import dev.codedefense.domain.SourceFile;
+import dev.codedefense.domain.SourceLineRange;
 import dev.codedefense.domain.StagedChangeFile;
 import dev.codedefense.domain.StagedFileStatus;
 import dev.codedefense.scanner.FilePrioritizer;
-import dev.codedefense.scanner.LineNumberFormatter;
 import dev.codedefense.scanner.ProjectFileFilter;
 import dev.codedefense.scanner.SecretRedactor;
 import dev.codedefense.scanner.SnapshotBudget;
@@ -19,9 +19,9 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.TreeSet;
 
-/** Builds a bounded project snapshot exclusively from captured Git index blobs. */
+/** Builds a bounded project snapshot exclusively from staged Git diff hunks. */
 public final class StagedChangeContextBuilder {
     private static final int MAXIMUM_DIFF_PREFIX_BYTES = 16 * 1024;
 
@@ -29,7 +29,6 @@ public final class StagedChangeContextBuilder {
     private final ProjectFileFilter filter;
     private final FilePrioritizer prioritizer;
     private final SecretRedactor redactor;
-    private final LineNumberFormatter formatter;
     private final SnapshotBudget budget;
 
     public StagedChangeContextBuilder() {
@@ -37,25 +36,26 @@ public final class StagedChangeContextBuilder {
     }
 
     StagedChangeContextBuilder(CodeDefenseConfig config) {
-        this(config, new ProjectFileFilter(), new FilePrioritizer(), new SecretRedactor(),
-                new LineNumberFormatter(), new SnapshotBudget());
+        this(config, new ProjectFileFilter(), new FilePrioritizer(), new SecretRedactor(), new SnapshotBudget());
     }
 
     StagedChangeContextBuilder(CodeDefenseConfig config, ProjectFileFilter filter,
-            FilePrioritizer prioritizer, SecretRedactor redactor, LineNumberFormatter formatter,
-            SnapshotBudget budget) {
+            FilePrioritizer prioritizer, SecretRedactor redactor, SnapshotBudget budget) {
         this.config = config;
         this.filter = filter;
         this.prioritizer = prioritizer;
         this.redactor = redactor;
-        this.formatter = formatter;
         this.budget = budget;
     }
 
     public ProjectSnapshot build(CapturedStagedChange captured) {
+        return buildHunkSnapshot(captured);
+    }
+
+    private ProjectSnapshot buildHunkSnapshot(CapturedStagedChange captured) {
         Map<Path, StagedChangeFile> declaredFiles = declaredFiles(captured.change().files());
-        Map<Path, IndexBlob> byPath = blobsByPath(captured.blobs(), declaredFiles);
-        List<SourceFile> candidates = currentCandidates(byPath);
+        Map<Path, List<StagedHunk>> hunksByPath = hunksByPath(captured.hunks(), declaredFiles);
+        List<SourceFile> candidates = hunkCandidates(hunksByPath);
         int ignored = captured.change().files().size() - candidates.size();
         ScanSummary summary = new ScanSummary(captured.change().repositoryRoot(), captured.change().files().size(),
                 ignored, candidates);
@@ -69,40 +69,42 @@ public final class StagedChangeContextBuilder {
             if (selected.size() >= config.maximumSelectedFiles()) {
                 break;
             }
-            IndexBlob blob = byPath.get(candidate.relativePath());
             int remaining = config.maximumSnapshotBytes() - budget.utf8Bytes(prompt.toString());
             int unitLimit = Math.min(remaining, config.maximumFileBlockBytes());
             if (unitLimit <= 1) {
                 break;
             }
-            SecretRedactor.RedactionResult indexed = redactor.redact(blob.indexContent().orElseThrow());
-            FittedBlock indexBlock = fitBlock("INDEX_FILE", blob.file(), indexed.content(),
-                    blob.indexTruncated(), unitLimit - 1);
-            if (indexBlock == null) {
-                continue;
-            }
-
-            String unit = indexBlock.content();
-            boolean truncated = indexBlock.truncated();
-            if (needsBaseContext(blob) && blob.baseContent().filter(content -> !content.isBlank()).isPresent()) {
-                SecretRedactor.RedactionResult base = redactor.redact(blob.baseContent().orElseThrow());
-                int availableForBase = unitLimit - budget.utf8Bytes(unit + "\n") - 1;
-                FittedBlock baseBlock = fitBlock("HEAD_FILE", blob.file(), base.content(), blob.baseTruncated(),
-                        availableForBase);
-                if (baseBlock != null) {
-                    unit += "\n" + baseBlock.content();
-                    truncated |= baseBlock.truncated();
+            StringBuilder unit = new StringBuilder();
+            List<SourceLineRange> ranges = new ArrayList<>();
+            boolean truncated = false;
+            for (StagedHunk hunk : hunksByPath.get(candidate.relativePath())) {
+                int available = unitLimit - 1 - budget.utf8Bytes(unit.toString()) - (unit.isEmpty() ? 0 : 1);
+                if (available <= 0) {
+                    truncated = true;
+                    break;
                 }
+                SecretRedactor.RedactionResult redacted = redactor.redact(hunk.unifiedContent());
+                FittedHunk fitted = fitHunk(hunk, redacted.content(), available);
+                if (fitted == null) {
+                    truncated = true;
+                    break;
+                }
+                if (!unit.isEmpty()) {
+                    unit.append('\n');
+                }
+                unit.append(fitted.content());
+                ranges.addAll(fitted.evidenceRanges());
+                truncated |= fitted.truncated();
             }
-            if (budget.utf8Bytes(unit + "\n") > unitLimit) {
+            if (unit.isEmpty() || budget.utf8Bytes(unit + "\n") > unitLimit) {
                 continue;
             }
             prompt.append(unit).append('\n');
-            redactions += redactionMarkers(unit);
-            selected.add(new ProjectSnapshot.SelectedFile(candidate.relativePath(), indexBlock.lineCount(), truncated,
-                    budget.utf8Bytes(unit + "\n")));
+            redactions += redactionMarkers(unit.toString());
+            List<SourceLineRange> evidenceRanges = mergeRanges(ranges);
+            selected.add(new ProjectSnapshot.SelectedFile(candidate.relativePath(), includedLineCount(evidenceRanges),
+                    evidenceRanges, truncated, budget.utf8Bytes(unit + "\n")));
         }
-
         if (selected.isEmpty()) {
             throw new EmptyProjectSnapshotException();
         }
@@ -115,44 +117,177 @@ public final class StagedChangeContextBuilder {
                 selected, promptContent, promptBytes, redactions);
     }
 
+    private Map<Path, List<StagedHunk>> hunksByPath(List<StagedHunk> hunks,
+            Map<Path, StagedChangeFile> declaredFiles) {
+        Map<Path, List<StagedHunk>> byPath = new HashMap<>();
+        for (StagedHunk hunk : hunks) {
+            StagedChangeFile declared = declaredFiles.get(hunk.file().path());
+            if (!hunk.file().equals(declared)) {
+                continue;
+            }
+            byPath.computeIfAbsent(hunk.file().path(), ignored -> new ArrayList<>()).add(hunk);
+        }
+        return Map.copyOf(byPath);
+    }
+
+    private List<SourceFile> hunkCandidates(Map<Path, List<StagedHunk>> hunksByPath) {
+        return hunksByPath.values().stream()
+                .map(List::getFirst)
+                .filter(hunk -> !filter.isExcludedFile(hunk.file().path()))
+                .filter(hunk -> !containsExcludedDirectory(hunk.file().path()))
+                .filter(hunk -> filter.isSupportedFile(hunk.file().path()))
+                .map(hunk -> new SourceFile(hunk.file().path(), hunk.unifiedContent().getBytes(StandardCharsets.UTF_8).length))
+                .sorted(Comparator.comparing(source -> portable(source.relativePath())))
+                .toList();
+    }
+
+    private FittedHunk fitHunk(StagedHunk hunk, String content, int byteLimit) {
+        String normalized = content.replace("\r\n", "\n").replace('\r', '\n');
+        while (normalized.endsWith("\n")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        if (byteLimit <= 0 || normalized.isEmpty()) {
+            return null;
+        }
+        if (budget.utf8Bytes(renderHunkBlock(hunk, normalized, hunk.truncated())) <= byteLimit) {
+            return fittedHunk(hunk, normalized, hunk.truncated());
+        }
+        StringBuilder included = new StringBuilder();
+        for (String line : normalized.split("\n", -1)) {
+            String candidate = included.isEmpty() ? line : included + "\n" + line;
+            if (budget.utf8Bytes(renderHunkBlock(hunk, candidate, true)) <= byteLimit) {
+                included.setLength(0);
+                included.append(candidate);
+                continue;
+            }
+            String prefix = longestHunkLinePrefix(hunk, included.toString(), line, byteLimit);
+            if (!prefix.isEmpty()) {
+                if (!included.isEmpty()) {
+                    included.append('\n');
+                }
+                included.append(prefix);
+            }
+            break;
+        }
+        if (included.isEmpty()) {
+            return null;
+        }
+        return fittedHunk(hunk, included.toString(), true);
+    }
+
+    private String longestHunkLinePrefix(StagedHunk hunk, String included, String line, int byteLimit) {
+        StringBuilder prefix = new StringBuilder();
+        for (int offset = 0; offset < line.length();) {
+            int codePoint = line.codePointAt(offset);
+            prefix.appendCodePoint(codePoint);
+            String candidate = included.isEmpty() ? prefix.toString() : included + "\n" + prefix;
+            if (budget.utf8Bytes(renderHunkBlock(hunk, candidate, true)) > byteLimit) {
+                prefix.setLength(prefix.length() - Character.charCount(codePoint));
+                break;
+            }
+            offset += Character.charCount(codePoint);
+        }
+        return prefix.toString();
+    }
+
+    private String renderHunkBlock(StagedHunk hunk, String content, boolean truncated) {
+        String kind = hunk.file().status() == StagedFileStatus.DELETED ? "HEAD_HUNK" : "STAGED_HUNK";
+        String state = hunk.file().status() == StagedFileStatus.DELETED
+                ? "DELETED_FROM_INDEX" : "STAGED_INDEX";
+        StringBuilder rendered = new StringBuilder();
+        rendered.append(kind).append(": ").append(portable(hunk.file().path())).append('\n')
+                .append("EVIDENCE_STATE: ").append(state).append('\n')
+                .append("STATUS: ").append(hunk.file().status()).append('\n')
+                .append("OLD_LINES: ").append(range(hunk.oldStartLine(), hunk.oldLineCount())).append('\n')
+                .append("NEW_LINES: ").append(range(hunk.newStartLine(), hunk.newLineCount())).append('\n')
+                .append("TRUNCATED: ").append(truncated).append('\n');
+        int oldLine = hunk.oldStartLine();
+        int newLine = hunk.newStartLine();
+        for (String line : content.split("\n", -1)) {
+            String value = line.substring(1);
+            switch (line.charAt(0)) {
+                case ' ' -> {
+                    rendered.append("OLD ").append(oldLine++).append(" | ").append(value).append('\n');
+                    rendered.append("NEW ").append(newLine++).append(" | ").append(value).append('\n');
+                }
+                case '-' -> rendered.append("OLD ").append(oldLine++).append(" | ").append(value).append('\n');
+                case '+' -> rendered.append("NEW ").append(newLine++).append(" | ").append(value).append('\n');
+                default -> throw new IllegalArgumentException("Hunk content has an invalid line prefix");
+            }
+        }
+        rendered.setLength(rendered.length() - 1);
+        return rendered.toString();
+    }
+
+    private FittedHunk fittedHunk(StagedHunk hunk, String rawContent, boolean truncated) {
+        return new FittedHunk(renderHunkBlock(hunk, rawContent, truncated), truncated,
+                retainedRanges(hunk, rawContent));
+    }
+
+    private List<SourceLineRange> retainedRanges(StagedHunk hunk, String content) {
+        TreeSet<Integer> retainedLines = new TreeSet<>();
+        int oldLine = hunk.oldStartLine();
+        int newLine = hunk.newStartLine();
+        for (String line : content.split("\n", -1)) {
+            if (line.isEmpty()) {
+                throw new IllegalArgumentException("Hunk content has an invalid line prefix");
+            }
+            switch (line.charAt(0)) {
+                case ' ' -> {
+                    retainedLines.add(oldLine++);
+                    retainedLines.add(newLine++);
+                }
+                case '-' -> retainedLines.add(oldLine++);
+                case '+' -> retainedLines.add(newLine++);
+                default -> throw new IllegalArgumentException("Hunk content has an invalid line prefix");
+            }
+        }
+        return ranges(retainedLines);
+    }
+
+    private List<SourceLineRange> ranges(TreeSet<Integer> lines) {
+        List<SourceLineRange> ranges = new ArrayList<>();
+        Integer start = null;
+        Integer previous = null;
+        for (int line : lines) {
+            if (start == null) {
+                start = line;
+            } else if (line != previous + 1) {
+                ranges.add(new SourceLineRange(start, previous));
+                start = line;
+            }
+            previous = line;
+        }
+        if (start != null) {
+            ranges.add(new SourceLineRange(start, previous));
+        }
+        return List.copyOf(ranges);
+    }
+
+    private List<SourceLineRange> mergeRanges(List<SourceLineRange> sourceRanges) {
+        TreeSet<Integer> lines = new TreeSet<>();
+        for (SourceLineRange range : sourceRanges) {
+            for (int line = range.startLine(); line <= range.endLine(); line++) {
+                lines.add(line);
+            }
+        }
+        return ranges(lines);
+    }
+
+    private int includedLineCount(List<SourceLineRange> ranges) {
+        return ranges.stream().mapToInt(range -> range.endLine() - range.startLine() + 1).sum();
+    }
+
+    private String range(int start, int count) {
+        return count == 0 ? "0" : start + "-" + (start + count - 1);
+    }
+
     private Map<Path, StagedChangeFile> declaredFiles(List<StagedChangeFile> files) {
         Map<Path, StagedChangeFile> byPath = new HashMap<>();
         for (StagedChangeFile file : files) {
             byPath.put(file.path(), file);
         }
         return byPath;
-    }
-
-    private Map<Path, IndexBlob> blobsByPath(List<IndexBlob> blobs, Map<Path, StagedChangeFile> declaredFiles) {
-        Map<Path, IndexBlob> byPath = new HashMap<>();
-        for (IndexBlob blob : blobs) {
-            StagedChangeFile declared = declaredFiles.get(blob.file().path());
-            if (!blob.file().equals(declared) || blob.file().status() == StagedFileStatus.DELETED) {
-                continue;
-            }
-            if (byPath.put(blob.file().path(), blob) != null) {
-                throw new IllegalArgumentException("Captured change contains duplicate paths");
-            }
-        }
-        return byPath;
-    }
-
-    private List<SourceFile> currentCandidates(Map<Path, IndexBlob> byPath) {
-        return byPath.values().stream()
-                .filter(blob -> blob.indexContent().filter(content -> !content.isBlank()).isPresent())
-                .filter(blob -> isCurrent(blob.file()))
-                .filter(blob -> !filter.isExcludedFile(blob.file().path()))
-                .filter(blob -> !containsExcludedDirectory(blob.file().path()))
-                .filter(blob -> filter.isSupportedFile(blob.file().path()))
-                .map(blob -> new SourceFile(blob.file().path(),
-                        blob.indexContent().orElseThrow().getBytes(StandardCharsets.UTF_8).length))
-                .sorted(Comparator.comparing(source -> portable(source.relativePath())))
-                .toList();
-    }
-
-    private boolean isCurrent(StagedChangeFile file) {
-        return file.status() == StagedFileStatus.ADDED || file.status() == StagedFileStatus.MODIFIED
-                || file.status() == StagedFileStatus.RENAMED;
     }
 
     private boolean containsExcludedDirectory(Path path) {
@@ -179,7 +314,7 @@ public final class StagedChangeContextBuilder {
         return "STAGED_CHANGE\n"
                 + "repository: " + projectName + "\n"
                 + "baseCommit: " + captured.change().baseCommit() + "\n"
-                + "indexTree: " + captured.change().indexTree() + "\n"
+                + "indexIdentity: " + captured.change().indexIdentity() + "\n"
                 + "diffFingerprint: " + captured.change().diffFingerprint() + "\n"
                 + "changedFiles: " + captured.change().files().size() + "\n"
                 + "CANONICAL_DIFF:\n";
@@ -203,85 +338,6 @@ public final class StagedChangeContextBuilder {
         return count;
     }
 
-    private boolean needsBaseContext(IndexBlob blob) {
-        return blob.file().status() == StagedFileStatus.MODIFIED || blob.file().status() == StagedFileStatus.RENAMED;
-    }
-
-    private FittedBlock fitBlock(String kind, StagedChangeFile file, String content, boolean sourceTruncated,
-            int byteLimit) {
-        if (byteLimit <= 0 || content.isBlank()) {
-            return null;
-        }
-        String normalized = content.replace("\r\n", "\n").replace('\r', '\n');
-        while (normalized.endsWith("\n")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        if (normalized.isEmpty()) {
-            return null;
-        }
-        String full = renderBlock(kind, file, normalized, sourceTruncated);
-        if (budget.utf8Bytes(full) <= byteLimit) {
-            return new FittedBlock(full, sourceTruncated, lineCount(normalized));
-        }
-
-        StringBuilder included = new StringBuilder();
-        for (String line : normalized.split("\n", -1)) {
-            String candidate = included.isEmpty() ? line : included + "\n" + line;
-            if (budget.utf8Bytes(renderBlock(kind, file, candidate, true)) <= byteLimit) {
-                included.setLength(0);
-                included.append(candidate);
-                continue;
-            }
-            String prefix = longestLinePrefix(kind, file, included.toString(), line, byteLimit);
-            if (!prefix.isEmpty()) {
-                if (!included.isEmpty()) {
-                    included.append('\n');
-                }
-                included.append(prefix);
-            }
-            break;
-        }
-        if (included.isEmpty()) {
-            return null;
-        }
-        String rendered = renderBlock(kind, file, included.toString(), true);
-        return new FittedBlock(rendered, true, lineCount(included.toString()));
-    }
-
-    private String longestLinePrefix(String kind, StagedChangeFile file, String included, String line, int byteLimit) {
-        StringBuilder prefix = new StringBuilder();
-        for (int offset = 0; offset < line.length();) {
-            int codePoint = line.codePointAt(offset);
-            prefix.appendCodePoint(codePoint);
-            String candidate = included.isEmpty() ? prefix.toString() : included + "\n" + prefix;
-            if (budget.utf8Bytes(renderBlock(kind, file, candidate, true)) > byteLimit) {
-                prefix.setLength(prefix.length() - Character.charCount(codePoint));
-                break;
-            }
-            offset += Character.charCount(codePoint);
-        }
-        return prefix.toString();
-    }
-
-    private String renderBlock(String kind, StagedChangeFile file, String content, boolean truncated) {
-        String numbered = formatter.format(content);
-        return kind + ": " + portable(file.path()) + "\n"
-                + "STATUS: " + file.status() + "\n"
-                + "LANGUAGE: " + language(file.path()) + "\n"
-                + "INCLUDED_LINES: " + lineCount(content) + "\n"
-                + "TRUNCATED: " + truncated + "\n"
-                + numbered;
-    }
-
-    private int lineCount(String content) {
-        return (int) formatter.format(content).lines().filter(line -> line.matches("\\d+ \\|.*")).count();
-    }
-
-    private String language(Path path) {
-        String value = portable(path);
-        int dot = value.lastIndexOf('.');
-        return dot < 0 ? "text" : value.substring(dot + 1).toLowerCase(java.util.Locale.ROOT);
-    }
 
     private String repositoryName(Path root) {
         Path fileName = root.getFileName();
@@ -292,6 +348,6 @@ public final class StagedChangeContextBuilder {
         return path.toString().replace('\\', '/');
     }
 
-    private record FittedBlock(String content, boolean truncated, int lineCount) {
+    private record FittedHunk(String content, boolean truncated, List<SourceLineRange> evidenceRanges) {
     }
 }

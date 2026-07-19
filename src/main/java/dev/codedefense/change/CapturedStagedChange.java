@@ -5,18 +5,20 @@ import java.util.List;
 import java.util.Objects;
 
 /** Safe transfer object for later bounded staged-context construction. */
-public record CapturedStagedChange(StagedChange change, List<IndexBlob> blobs) {
+public record CapturedStagedChange(
+        StagedChange change,
+        List<StagedHunk> hunks) {
     public CapturedStagedChange {
         Objects.requireNonNull(change, "change");
-        Objects.requireNonNull(blobs, "blobs");
-        if (blobs.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("blobs cannot contain null");
+        Objects.requireNonNull(hunks, "hunks");
+        if (hunks.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("hunks cannot contain null");
         }
-        blobs = List.copyOf(blobs);
+        hunks = List.copyOf(hunks);
     }
 
     @Override
     public String toString() {
-        return "CapturedStagedChange[change=%s, blobCount=%d]".formatted(change, blobs.size());
+        return "CapturedStagedChange[change=%s, hunkCount=%d]".formatted(change, hunks.size());
     }
 }

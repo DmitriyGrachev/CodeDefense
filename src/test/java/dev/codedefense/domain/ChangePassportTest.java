@@ -14,7 +14,7 @@ class ChangePassportTest {
     @Test
     void constructsPassportAndVerificationWithoutLeakingPrivateInterviewData() {
         ProjectAnalysis analysis = analysis("project-a");
-        ChangePassport passport = new ChangePassport(change(), analysis, session("project-a"), Instant.EPOCH,
+        ChangePassport passport = new ChangePassport(change(), analysis, session("project-a", analysis), Instant.EPOCH,
                 "model", PassportStatus.CURRENT);
         PassportVerification verification = new PassportVerification(Path.of("C:/passport.json"), PassportStatus.CURRENT);
 
@@ -27,14 +27,29 @@ class ChangePassportTest {
 
     @Test
     void rejectsNullAnalysisAndSessionForAnotherProject() {
-        assertThrows(NullPointerException.class, () -> new ChangePassport(change(), null, session("project-a"),
+        ProjectAnalysis analysis = analysis("project-a");
+        assertThrows(NullPointerException.class, () -> new ChangePassport(change(), null, session("project-a", analysis),
                 Instant.EPOCH, "model", PassportStatus.CURRENT));
-        assertThrows(IllegalArgumentException.class, () -> new ChangePassport(change(), analysis("project-a"), session("project-b"),
+        assertThrows(IllegalArgumentException.class, () -> new ChangePassport(change(), analysis, session("project-b", analysis),
+                Instant.EPOCH, "model", PassportStatus.CURRENT));
+    }
+
+    @Test
+    void rejectsSessionResultsThatDoNotMatchAnalysisQuestionIdsInOrder() {
+        ProjectAnalysis analysis = analysis("project-a");
+        List<QuestionResult> reordered = List.of(
+                result(1, analysis.questions().get(1)),
+                result(2, analysis.questions().get(0)),
+                result(3, analysis.questions().get(2)));
+        InterviewSession session = new InterviewSession("project-a", reordered, 80,
+                Readiness.STRONG_UNDERSTANDING, 0);
+
+        assertThrows(IllegalArgumentException.class, () -> new ChangePassport(change(), analysis, session,
                 Instant.EPOCH, "model", PassportStatus.CURRENT));
     }
 
     private static StagedChange change() {
-        return new StagedChange(Path.of("C:/repository"), "a".repeat(64), "b".repeat(40), "b".repeat(40),
+        return new StagedChange(Path.of("C:/repository"), "a".repeat(64), "b".repeat(40), "b".repeat(64),
                 "c".repeat(64), List.of(new StagedChangeFile(Path.of("src/App.java"), StagedFileStatus.ADDED, 1, 0)), 1, 0);
     }
 
@@ -49,15 +64,16 @@ class ChangePassportTest {
                 List.of(new CodeEvidence("src/App.java", 1, 1, "private-evidence-reason")));
     }
 
-    private static InterviewSession session(String projectName) {
-        return new InterviewSession(projectName, List.of(result(1), result(2), result(3)), 80,
+    private static InterviewSession session(String projectName, ProjectAnalysis analysis) {
+        return new InterviewSession(projectName, List.of(result(1, analysis.questions().get(0)),
+                result(2, analysis.questions().get(1)), result(3, analysis.questions().get(2))), 80,
                 Readiness.STRONG_UNDERSTANDING, 0);
     }
 
-    private static QuestionResult result(int number) {
+    private static QuestionResult result(int number, TechnicalQuestion question) {
         AnswerEvaluation evaluation = new AnswerEvaluation(Verdict.CORRECT, 80, "private-feedback", List.of("understood"),
                 List.of(), Optional.empty());
         InterviewTurn turn = new InterviewTurn(TurnType.PRIMARY, "private-prompt", "private-answer", evaluation);
-        return new QuestionResult(number, question("question-" + number), turn, Optional.empty(), 80);
+        return new QuestionResult(number, question, turn, Optional.empty(), 80);
     }
 }

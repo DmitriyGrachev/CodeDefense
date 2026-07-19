@@ -23,7 +23,7 @@ import java.util.Optional;
 public final class PassportTestFixtures {
     private PassportTestFixtures() { }
     public static ChangePassport passport(PassportStatus status) {
-        StagedChange change = new StagedChange(Path.of("C:/safe/project").toAbsolutePath().normalize(), "a".repeat(64), "b".repeat(40), "c".repeat(40), "d".repeat(64),
+        StagedChange change = new StagedChange(Path.of("C:/safe/project").toAbsolutePath().normalize(), "a".repeat(64), "b".repeat(40), "c".repeat(64), "d".repeat(64),
                 List.of(new StagedChangeFile(Path.of("src/App.java"), StagedFileStatus.MODIFIED, 2, 1)), 2, 1);
         List<TechnicalQuestion> questions = List.of(question("decision"), question("counterfactual"), question("test-prediction"));
         ProjectAnalysis analysis = new ProjectAnalysis("demo", "Java", "summary", List.of("a", "b"), List.of(new dev.codedefense.domain.ProjectComponent("App", "role", "summary", List.of("src/App.java"))), List.of("one", "two"), questions);

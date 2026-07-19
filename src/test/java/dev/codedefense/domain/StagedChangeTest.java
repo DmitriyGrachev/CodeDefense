@@ -12,12 +12,13 @@ import org.junit.jupiter.api.Test;
 class StagedChangeTest {
     private static final String SHA_256 = "a".repeat(64);
     private static final String GIT_ID = "b".repeat(40);
+    private static final String INDEX_ID = "c".repeat(64);
 
     @Test
     void constructsAnImmutableOrderedStagedChange() {
         List<StagedChangeFile> files = new ArrayList<>(List.of(file("src/App.java")));
 
-        StagedChange change = new StagedChange(Path.of("C:/repository"), SHA_256, GIT_ID, GIT_ID,
+        StagedChange change = new StagedChange(Path.of("C:/repository"), SHA_256, GIT_ID, INDEX_ID,
                 SHA_256, files, 3, 1);
         files.clear();
 
@@ -29,12 +30,12 @@ class StagedChangeTest {
     @Test
     void rejectsInvalidRootHashesGitIdsAndLineTotals() {
         assertThrows(IllegalArgumentException.class, () -> new StagedChange(Path.of("relative"), SHA_256, GIT_ID,
-                GIT_ID, SHA_256, List.of(file("src/App.java")), 0, 0));
+                INDEX_ID, SHA_256, List.of(file("src/App.java")), 0, 0));
         assertThrows(IllegalArgumentException.class, () -> changeWithIdentity("A".repeat(64)));
         assertThrows(IllegalArgumentException.class, () -> changeWithDiff("a".repeat(63)));
         assertThrows(IllegalArgumentException.class, () -> changeWithBase("a".repeat(39)));
-        assertThrows(IllegalArgumentException.class, () -> changeWithIndex("A".repeat(40)));
-        assertThrows(IllegalArgumentException.class, () -> new StagedChange(root(), SHA_256, GIT_ID, GIT_ID, SHA_256,
+        assertThrows(IllegalArgumentException.class, () -> changeWithIndex("A".repeat(64)));
+        assertThrows(IllegalArgumentException.class, () -> new StagedChange(root(), SHA_256, GIT_ID, INDEX_ID, SHA_256,
                 List.of(file("src/App.java")), -1, 0));
     }
 
@@ -48,15 +49,15 @@ class StagedChangeTest {
 
     @Test
     void rejectsDuplicateOrUnorderedFiles() {
-        assertThrows(IllegalArgumentException.class, () -> new StagedChange(root(), SHA_256, GIT_ID, GIT_ID, SHA_256,
+        assertThrows(IllegalArgumentException.class, () -> new StagedChange(root(), SHA_256, GIT_ID, INDEX_ID, SHA_256,
                 List.of(file("src/B.java"), file("src/A.java")), 2, 0));
-        assertThrows(IllegalArgumentException.class, () -> new StagedChange(root(), SHA_256, GIT_ID, GIT_ID, SHA_256,
+        assertThrows(IllegalArgumentException.class, () -> new StagedChange(root(), SHA_256, GIT_ID, INDEX_ID, SHA_256,
                 List.of(file("src/A.java"), file("src/A.java")), 2, 0));
     }
 
     @Test
     void doesNotExposeFutureSourceContentInToString() {
-        StagedChange change = new StagedChange(root(), SHA_256, GIT_ID, GIT_ID, SHA_256,
+        StagedChange change = new StagedChange(root(), SHA_256, GIT_ID, INDEX_ID, SHA_256,
                 List.of(file("src/App.java")), 1, 0);
 
         assertDoesNotThrow(change::toString);
@@ -64,15 +65,15 @@ class StagedChangeTest {
     }
 
     private static StagedChange changeWithIdentity(String identity) {
-        return new StagedChange(root(), identity, GIT_ID, GIT_ID, SHA_256, List.of(file("src/App.java")), 0, 0);
+        return new StagedChange(root(), identity, GIT_ID, INDEX_ID, SHA_256, List.of(file("src/App.java")), 0, 0);
     }
 
     private static StagedChange changeWithDiff(String fingerprint) {
-        return new StagedChange(root(), SHA_256, GIT_ID, GIT_ID, fingerprint, List.of(file("src/App.java")), 0, 0);
+        return new StagedChange(root(), SHA_256, GIT_ID, INDEX_ID, fingerprint, List.of(file("src/App.java")), 0, 0);
     }
 
     private static StagedChange changeWithBase(String base) {
-        return new StagedChange(root(), SHA_256, base, GIT_ID, SHA_256, List.of(file("src/App.java")), 0, 0);
+        return new StagedChange(root(), SHA_256, base, INDEX_ID, SHA_256, List.of(file("src/App.java")), 0, 0);
     }
 
     private static StagedChange changeWithIndex(String index) {

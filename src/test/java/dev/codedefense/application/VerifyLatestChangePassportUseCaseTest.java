@@ -29,7 +29,7 @@ class VerifyLatestChangePassportUseCaseTest {
     @Test
     void returnsExpiredForDifferentIndexWithoutRewritingArtifact() {
         var passport = PassportTestFixtures.passport(PassportStatus.CURRENT);
-        var changed = new dev.codedefense.domain.StagedChange(passport.change().repositoryRoot(), passport.change().repositoryIdentityHash(), passport.change().baseCommit(), passport.change().indexTree(), "e".repeat(64), passport.change().files(), 2, 1);
+        var changed = new dev.codedefense.domain.StagedChange(passport.change().repositoryRoot(), passport.change().repositoryIdentityHash(), passport.change().baseCommit(), passport.change().indexIdentity(), "e".repeat(64), passport.change().files(), 2, 1);
         StagedChangeSource source = ignored -> new CapturedStagedChange(changed, java.util.List.of());
         StoredPassportIdentity identity = StoredPassportIdentity.from(passport, Path.of("passport.md").toAbsolutePath());
         dev.codedefense.passport.ChangePassportStore store = new dev.codedefense.passport.ChangePassportStore() {
@@ -43,7 +43,7 @@ class VerifyLatestChangePassportUseCaseTest {
     void returnsExpiredForDifferentRepositoryAndEmptyForNoLatestArtifact() {
         var passport = PassportTestFixtures.passport(PassportStatus.CURRENT);
         var otherRoot = Path.of("C:/other/project").toAbsolutePath().normalize();
-        var differentRepository = new dev.codedefense.domain.StagedChange(otherRoot, "f".repeat(64), passport.change().baseCommit(), passport.change().indexTree(), passport.change().diffFingerprint(), passport.change().files(), 2, 1);
+        var differentRepository = new dev.codedefense.domain.StagedChange(otherRoot, "f".repeat(64), passport.change().baseCommit(), passport.change().indexIdentity(), passport.change().diffFingerprint(), passport.change().files(), 2, 1);
         StagedChangeSource source = ignored -> new CapturedStagedChange(differentRepository, java.util.List.of());
         StoredPassportIdentity identity = StoredPassportIdentity.from(passport, Path.of("passport.md").toAbsolutePath());
         dev.codedefense.passport.ChangePassportStore stored = new dev.codedefense.passport.ChangePassportStore() {
@@ -63,7 +63,7 @@ class VerifyLatestChangePassportUseCaseTest {
         var passport = PassportTestFixtures.passport(PassportStatus.CURRENT);
         StagedChangeIdentity empty = new StagedChangeIdentity(
                 passport.change().repositoryRoot(), passport.change().repositoryIdentityHash(), passport.change().baseCommit(),
-                passport.change().indexTree(), passport.change().diffFingerprint(), java.util.List.of());
+                passport.change().indexIdentity(), passport.change().diffFingerprint(), java.util.List.of());
         StoredPassportIdentity identity = StoredPassportIdentity.from(passport, Path.of("passport.md").toAbsolutePath());
         dev.codedefense.passport.ChangePassportStore store = new dev.codedefense.passport.ChangePassportStore() {
             public Path save(dev.codedefense.domain.ChangePassport ignored) { throw new AssertionError("verification must not save"); }

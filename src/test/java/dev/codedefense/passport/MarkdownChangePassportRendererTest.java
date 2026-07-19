@@ -4,12 +4,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.codedefense.domain.ChangePassport;
+import dev.codedefense.domain.AnswerEvaluation;
+import dev.codedefense.domain.InterviewTurn;
 import dev.codedefense.domain.InterviewSession;
 import dev.codedefense.domain.PassportStatus;
 import dev.codedefense.domain.QuestionResult;
 import dev.codedefense.domain.Readiness;
+import dev.codedefense.domain.TurnType;
+import dev.codedefense.domain.Verdict;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class MarkdownChangePassportRendererTest {
@@ -35,18 +40,13 @@ class MarkdownChangePassportRendererTest {
     }
 
     @Test
-    void labelsQuestionsByTheirActualCategoryAndRendersOnlySafeEducationalContext() {
-        ChangePassport original = PassportTestFixtures.passport(PassportStatus.CURRENT);
-        List<QuestionResult> originalResults = original.session().results();
-        List<QuestionResult> reordered = List.of(
-                renumber(1, originalResults.get(2)), renumber(2, originalResults.get(0)), renumber(3, originalResults.get(1)));
-        InterviewSession session = new InterviewSession(original.session().projectName(), reordered, 55, Readiness.REVIEW_NEEDED, 0);
-        ChangePassport passport = new ChangePassport(original.change(), original.analysis(), session,
-                Instant.parse("2026-07-18T00:00:00Z"), "model", PassportStatus.CURRENT);
+    void rendersQuestionCategoriesAndOnlySafeEducationalContext() {
+        ChangePassport passport = PassportTestFixtures.passport(PassportStatus.CURRENT);
 
         String markdown = new MarkdownChangePassportRenderer().render(passport);
 
-        assertTrue(markdown.indexOf("## Test prediction") < markdown.indexOf("## Decision defense"));
+        assertTrue(markdown.indexOf("## Decision defense") < markdown.indexOf("## Counterfactual defense"));
+        assertTrue(markdown.indexOf("## Counterfactual defense") < markdown.indexOf("## Test prediction"));
         assertTrue(markdown.contains("- Question: prompt"));
         assertTrue(markdown.contains("- Evidence: src/App\\.java:1-2"));
         assertTrue(markdown.contains("- Understood concepts: understood"));
@@ -59,7 +59,34 @@ class MarkdownChangePassportRendererTest {
         assertFalse(markdown.contains("raw JSON"));
     }
 
-    private static QuestionResult renumber(int number, QuestionResult source) {
-        return new QuestionResult(number, source.question(), source.primaryTurn(), source.followUpTurn(), source.finalScore());
+    @Test
+    void rendersSafeFollowUpEvaluationWithoutEitherAnswer() {
+        ChangePassport original = PassportTestFixtures.passport(PassportStatus.CURRENT);
+        QuestionResult primary = original.session().results().getFirst();
+        InterviewTurn followUp = new InterviewTurn(TurnType.FOLLOW_UP, "follow-up question",
+                "private-follow-up-answer", new AnswerEvaluation(Verdict.CORRECT, 80, "follow-up feedback",
+                        List.of("follow-up understood"), List.of("follow-up missing"), Optional.empty()));
+        QuestionResult withFollowUp = new QuestionResult(1, primary.question(), primary.primaryTurn(),
+                Optional.of(followUp), 61);
+        InterviewSession session = new InterviewSession(original.session().projectName(), List.of(withFollowUp,
+                original.session().results().get(1), original.session().results().get(2)), 55,
+                Readiness.REVIEW_NEEDED, 0);
+        ChangePassport passport = new ChangePassport(original.change(), original.analysis(), session,
+                Instant.parse("2026-07-18T00:00:00Z"), "model", PassportStatus.CURRENT);
+
+        String markdown = new MarkdownChangePassportRenderer().render(passport);
+
+        assertTrue(markdown.contains("### Primary evaluation"));
+        assertTrue(markdown.contains("### Follow-up evaluation"));
+        assertTrue(markdown.contains("- Question: follow\\-up question"));
+        assertTrue(markdown.contains("- Verdict: CORRECT"));
+        assertTrue(markdown.contains("- Score: 80/100"));
+        assertTrue(markdown.contains("- Feedback: follow\\-up feedback"));
+        assertTrue(markdown.contains("- Understood concepts: follow\\-up understood"));
+        assertTrue(markdown.contains("- Knowledge gaps: follow\\-up missing"));
+        assertTrue(markdown.contains("- Local final score: 61/100"));
+        assertFalse(markdown.contains("private-answer"));
+        assertFalse(markdown.contains("private-follow-up-answer"));
     }
+
 }

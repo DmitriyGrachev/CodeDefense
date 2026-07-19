@@ -42,9 +42,9 @@ public final class ProjectAnalysisValidator {
             throw invalidResponse();
         }
 
-        Map<String, Integer> selectedLines = selectedLines(snapshot);
-        List<ProjectComponent> components = validateComponents(analysis.components(), selectedLines);
-        List<TechnicalQuestion> questions = validateQuestions(analysis.questions(), selectedLines);
+        Map<String, ProjectSnapshot.SelectedFile> selectedFiles = selectedFiles(snapshot);
+        List<ProjectComponent> components = validateComponents(analysis.components(), selectedFiles);
+        List<TechnicalQuestion> questions = validateQuestions(analysis.questions(), selectedFiles);
         validateUniqueNormalized(analysis.mainFlow());
         validateUniqueNormalized(analysis.criticalTopics());
 
@@ -53,14 +53,14 @@ public final class ProjectAnalysisValidator {
                 components, analysis.criticalTopics(), questions);
     }
 
-    private static Map<String, Integer> selectedLines(ProjectSnapshot snapshot) {
-        Map<String, Integer> selected = new LinkedHashMap<>();
+    private static Map<String, ProjectSnapshot.SelectedFile> selectedFiles(ProjectSnapshot snapshot) {
+        Map<String, ProjectSnapshot.SelectedFile> selected = new LinkedHashMap<>();
         for (ProjectSnapshot.SelectedFile file : snapshot.selectedFiles()) {
             if (file == null || file.includedLines() < 1) {
                 throw invalidResponse();
             }
             String path = normalizeSelectedPath(file.relativePath());
-            if (selected.put(path, file.includedLines()) != null) {
+            if (selected.put(path, file) != null) {
                 throw invalidResponse();
             }
         }
@@ -68,7 +68,7 @@ public final class ProjectAnalysisValidator {
     }
 
     private static List<ProjectComponent> validateComponents(
-            List<ProjectComponent> components, Map<String, Integer> selectedLines) {
+            List<ProjectComponent> components, Map<String, ProjectSnapshot.SelectedFile> selectedFiles) {
         if (!boundedList(components, 1, 12)) {
             throw invalidResponse();
         }
@@ -82,7 +82,7 @@ public final class ProjectAnalysisValidator {
                     || !boundedList(component.paths(), 1, 5)) {
                 throw invalidResponse();
             }
-            List<String> paths = normalizePaths(component.paths(), selectedLines);
+            List<String> paths = normalizePaths(component.paths(), selectedFiles);
             List<String> sortedPaths = paths.stream().sorted().toList();
             if (!identities.add(new ComponentIdentity(normalizeText(component.name()), sortedPaths))) {
                 throw invalidResponse();
@@ -92,7 +92,7 @@ public final class ProjectAnalysisValidator {
         return List.copyOf(normalized);
     }
 
-    private static List<String> normalizePaths(List<String> paths, Map<String, Integer> selectedLines) {
+    private static List<String> normalizePaths(List<String> paths, Map<String, ProjectSnapshot.SelectedFile> selectedFiles) {
         List<String> normalized = new ArrayList<>(paths.size());
         Set<String> unique = new HashSet<>();
         for (String path : paths) {
@@ -100,7 +100,7 @@ public final class ProjectAnalysisValidator {
                 throw invalidResponse();
             }
             String portable = normalizeModelPath(path);
-            if (!selectedLines.containsKey(portable) || !unique.add(portable)) {
+            if (!selectedFiles.containsKey(portable) || !unique.add(portable)) {
                 throw invalidResponse();
             }
             normalized.add(portable);
@@ -109,7 +109,7 @@ public final class ProjectAnalysisValidator {
     }
 
     private static List<TechnicalQuestion> validateQuestions(
-            List<TechnicalQuestion> questions, Map<String, Integer> selectedLines) {
+            List<TechnicalQuestion> questions, Map<String, ProjectSnapshot.SelectedFile> selectedFiles) {
         Set<String> ids = new HashSet<>();
         Set<String> prompts = new HashSet<>();
         List<TechnicalQuestion> normalized = new ArrayList<>(questions.size());
@@ -126,7 +126,7 @@ public final class ProjectAnalysisValidator {
                 throw invalidResponse();
             }
             validateUniqueNormalized(question.expectedKeyPoints());
-            List<CodeEvidence> evidence = validateEvidence(question.evidence(), selectedLines);
+            List<CodeEvidence> evidence = validateEvidence(question.evidence(), selectedFiles);
             normalized.add(new TechnicalQuestion(
                     question.id(), question.prompt(), question.learningGoal(), question.expectedKeyPoints(), evidence));
         }
@@ -134,7 +134,7 @@ public final class ProjectAnalysisValidator {
     }
 
     private static List<CodeEvidence> validateEvidence(
-            List<CodeEvidence> evidence, Map<String, Integer> selectedLines) {
+            List<CodeEvidence> evidence, Map<String, ProjectSnapshot.SelectedFile> selectedFiles) {
         Set<EvidenceLocation> locations = new HashSet<>();
         List<CodeEvidence> normalized = new ArrayList<>(evidence.size());
         for (CodeEvidence item : evidence) {
@@ -143,9 +143,10 @@ public final class ProjectAnalysisValidator {
                 throw invalidResponse();
             }
             String path = normalizeModelPath(item.path());
-            Integer includedLines = selectedLines.get(path);
+            ProjectSnapshot.SelectedFile selectedFile = selectedFiles.get(path);
             EvidenceLocation location = new EvidenceLocation(path, item.startLine(), item.endLine());
-            if (includedLines == null || item.endLine() > includedLines || !locations.add(location)) {
+            if (selectedFile == null || !selectedFile.containsEvidence(item.startLine(), item.endLine())
+                    || !locations.add(location)) {
                 throw invalidResponse();
             }
             normalized.add(new CodeEvidence(path, item.startLine(), item.endLine(), item.reason()));

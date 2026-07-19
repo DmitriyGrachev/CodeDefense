@@ -44,7 +44,7 @@ class StagedChangePromptFactoryTest {
 
     private static StagedChange change() {
         Path root = Path.of(".").toAbsolutePath().normalize();
-        return new StagedChange(root, "a".repeat(64), "b".repeat(40), "c".repeat(40), "d".repeat(64),
+        return new StagedChange(root, "a".repeat(64), "b".repeat(40), "c".repeat(64), "d".repeat(64),
                 List.of(new StagedChangeFile(Path.of("src/App.java"), StagedFileStatus.MODIFIED, 2, 1)), 2, 1);
     }
 }

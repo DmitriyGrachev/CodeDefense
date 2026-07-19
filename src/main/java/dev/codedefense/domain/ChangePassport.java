@@ -23,6 +23,11 @@ public record ChangePassport(
         if (!analysis.projectName().equals(session.projectName())) {
             throw new IllegalArgumentException("session must belong to the analysis project");
         }
+        for (int index = 0; index < analysis.questions().size(); index++) {
+            if (!analysis.questions().get(index).id().equals(session.results().get(index).question().id())) {
+                throw new IllegalArgumentException("session results must match analysis questions in order");
+            }
+        }
     }
 
     @Override

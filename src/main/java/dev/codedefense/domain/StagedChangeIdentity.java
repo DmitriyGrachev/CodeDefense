@@ -15,7 +15,7 @@ public record StagedChangeIdentity(
         Path repositoryRoot,
         String repositoryIdentityHash,
         String baseCommit,
-        String indexTree,
+        String indexIdentity,
         String diffFingerprint,
         List<String> changedPathHashes) {
     private static final String SHA_256_PATTERN = "[0-9a-f]{64}";
@@ -28,7 +28,7 @@ public record StagedChangeIdentity(
         }
         repositoryIdentityHash = requireMatch(repositoryIdentityHash, SHA_256_PATTERN, "repositoryIdentityHash");
         baseCommit = requireMatch(baseCommit, GIT_ID_PATTERN, "baseCommit");
-        indexTree = requireMatch(indexTree, GIT_ID_PATTERN, "indexTree");
+        indexIdentity = requireMatch(indexIdentity, SHA_256_PATTERN, "indexIdentity");
         diffFingerprint = requireMatch(diffFingerprint, SHA_256_PATTERN, "diffFingerprint");
         Objects.requireNonNull(changedPathHashes, "changedPathHashes");
         changedPathHashes = List.copyOf(changedPathHashes);
@@ -48,7 +48,7 @@ public record StagedChangeIdentity(
                 change.repositoryRoot(),
                 change.repositoryIdentityHash(),
                 change.baseCommit(),
-                change.indexTree(),
+                change.indexIdentity(),
                 change.diffFingerprint(),
                 change.files().stream().map(StagedChangeFile::path).map(StagedChangeIdentity::pathHash).sorted().toList());
     }

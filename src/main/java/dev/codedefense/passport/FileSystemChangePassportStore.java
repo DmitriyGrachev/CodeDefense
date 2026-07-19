@@ -91,11 +91,13 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
         if (metadata == null) throw new IOException("invalid metadata");
         String[] fields = metadata.split(";", -1);
         if (fields.length != 6 || !fields[0].startsWith("root=") || !fields[1].startsWith("base=")
-                || !fields[2].startsWith("tree=") || !fields[3].startsWith("diff=")
+                || (!fields[2].startsWith("index=") && !fields[2].startsWith("tree=")) || !fields[3].startsWith("diff=")
                 || !fields[4].startsWith("paths=") || !fields[5].startsWith("timestamp=")) {
             throw new IOException("invalid metadata");
         }
-        try { return new StoredPassportIdentity(artifact, fields[0].substring(5), fields[1].substring(5), fields[2].substring(5), fields[3].substring(5), java.util.List.of(fields[4].substring(6).split(",")), Instant.parse(fields[5].substring(10))); }
+        boolean legacyTree = fields[2].startsWith("tree=");
+        String indexIdentity = legacyTree ? "0".repeat(64) : fields[2].substring(6);
+        try { return new StoredPassportIdentity(artifact, fields[0].substring(5), fields[1].substring(5), indexIdentity, fields[3].substring(5), java.util.List.of(fields[4].substring(6).split(",")), Instant.parse(fields[5].substring(10)), legacyTree); }
         catch (IllegalArgumentException exception) { throw new IOException("invalid metadata", exception); }
     }
     private Path pointer(String value) throws IOException {

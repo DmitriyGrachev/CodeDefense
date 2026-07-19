@@ -7,6 +7,7 @@ import dev.codedefense.domain.ProjectSnapshot;
 import dev.codedefense.domain.StagedChange;
 import dev.codedefense.domain.StagedChangeFile;
 import dev.codedefense.domain.StagedFileStatus;
+import dev.codedefense.domain.DefenseFocus;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,16 @@ class StagedChangePromptFactoryTest {
         assertTrue(prompt.contains("test-prediction"));
         assertTrue(prompt.toLowerCase(java.util.Locale.ROOT).contains("do not reproduce source"));
         assertTrue(prompt.toLowerCase(java.util.Locale.ROOT).contains("do not make security"));
+    }
+
+    @Test
+    void placesTrustedFocusDirectiveOnceBeforeUntrustedChange() {
+        String prompt = new StagedChangePromptFactory().create(change(),
+                StagedChangeAnalysisValidatorTest.snapshot(), DefenseFocus.FAILURE_MODES);
+        int boundary = prompt.indexOf("BEGIN CODEDEFENSE_UNTRUSTED_STAGED_CHANGE");
+        String directive = "Defense focus: Failure modes.";
+        assertTrue(prompt.indexOf(directive) >= 0 && prompt.indexOf(directive) < boundary);
+        assertTrue(prompt.indexOf(directive) == prompt.lastIndexOf(directive));
     }
 
     private static StagedChange change() {

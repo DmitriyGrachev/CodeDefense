@@ -10,7 +10,13 @@
 - [x] Iteration 7 — Markdown reports and report command.
 - [X] Iteration 8 — embedded sample project.
 - [x] Iteration 8.5 — staged Change Passport core.
-- [ ] Iteration 8.6 (optional) — Change Passport session integration.
+- [x] Iteration 8.6 — Passport Command Center and source-free JSON receipts.
+- [x] Iteration 8.7 — staged, commit, and merge-base range defense.
+- [x] Iteration 8.8 — change-scoped re-defense attempt timeline.
+- [x] Iteration 8.9 — portable source-free Change Handoff.
+- [x] Iteration 8.10 — evidence-grounded defense focus modes.
+- [ ] Iteration 8.11 — JetBrains plugin over the local bridge protocol.
+- [ ] Iteration 8.12 — experimental consented Codex provenance.
 - [ ] Iteration 9 — reliability, release documentation, and submission readiness.
 
 Only the current approved iteration may be implemented. The detailed acceptance criteria are in the [master implementation plan](codedefense-mvp-implementation-plan.md).

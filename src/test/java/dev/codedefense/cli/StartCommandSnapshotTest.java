@@ -1,6 +1,8 @@
 package dev.codedefense.cli;
 
 import dev.codedefense.application.CodeDefenseConfig;
+import dev.codedefense.application.CodeDefenseRuntime;
+import dev.codedefense.application.DefaultProjectDefenseRunner;
 import dev.codedefense.domain.CodeEvidence;
 import dev.codedefense.domain.ProjectAnalysis;
 import dev.codedefense.domain.ProjectComponent;
@@ -65,12 +67,16 @@ class StartCommandSnapshotTest {
     }
 
     private CommandLine commandLine(ProjectScanner scanner, ConfirmationPrompt confirmation, ByteArrayOutputStream output) {
-        var commandLine = new CommandLine(new StartCommand(
+        var runner = new DefaultProjectDefenseRunner(
                 scanner,
                 new ProjectSnapshotBuilder(CodeDefenseConfig.defaults()),
                 confirmation,
-                snapshot -> analysis(),
-                new ProjectAnalysisRenderer()));
+                new ProjectAnalysisRenderer(),
+                ignored -> new CodeDefenseRuntime(snapshot -> analysis(), analysis -> null,
+                        (snapshot, analysis, session) -> {
+                            throw new AssertionError("No report is expected without an interview session");
+                        }));
+        var commandLine = new CommandLine(new StartCommand(runner));
         commandLine.setOut(new PrintWriter(output, true, StandardCharsets.UTF_8));
         return commandLine;
     }

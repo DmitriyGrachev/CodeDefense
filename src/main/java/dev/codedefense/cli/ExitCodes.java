@@ -10,6 +10,7 @@ public final class ExitCodes {
     public static final int CODEX_EXECUTION_FAILED = 7;
     public static final int INVALID_MODEL_RESPONSE = 8;
     public static final int REPORT_PERSISTENCE_FAILED = 9;
+    public static final int GIT_EXECUTION_FAILED = 10;
     public static final int CANCELLED = 130;
 
     private ExitCodes() {

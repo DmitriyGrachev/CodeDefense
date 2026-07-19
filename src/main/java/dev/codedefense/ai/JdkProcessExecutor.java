@@ -211,6 +211,7 @@ public final class JdkProcessExecutor implements ProcessExecutor {
         return new ProcessResult(
                 exitCode,
                 capturedStdout.text(),
+                capturedStdout.bytes(),
                 capturedStderr.text(),
                 capturedStdout.truncated(),
                 capturedStderr.truncated(),
@@ -267,7 +268,8 @@ public final class JdkProcessExecutor implements ProcessExecutor {
         }
 
         private synchronized CapturedOutput snapshot() {
-            return new CapturedOutput(captured.toString(StandardCharsets.UTF_8), truncated);
+            byte[] bytes = captured.toByteArray();
+            return new CapturedOutput(new String(bytes, StandardCharsets.UTF_8), bytes, truncated);
         }
     }
 
@@ -278,7 +280,7 @@ public final class JdkProcessExecutor implements ProcessExecutor {
         }
     }
 
-    private record CapturedOutput(String text, boolean truncated) {
+    private record CapturedOutput(String text, byte[] bytes, boolean truncated) {
     }
 
     private record InputWriteResult(IOException failure) {

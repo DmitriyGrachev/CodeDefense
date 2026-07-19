@@ -40,6 +40,7 @@ class CliFoundationTest {
         assertTrue(help.contains("report"));
         assertTrue(help.contains("prove"));
         assertTrue(help.contains("passport"));
+        assertTrue(!help.contains("bridge"));
     }
 
     @Test
@@ -51,6 +52,7 @@ class CliFoundationTest {
         assertTrue(commandLine.getSubcommands().containsKey("report"));
         assertTrue(commandLine.getSubcommands().containsKey("prove"));
         assertTrue(commandLine.getSubcommands().containsKey("passport"));
+        assertTrue(commandLine.getSubcommands().containsKey("bridge"));
     }
 
     @Test

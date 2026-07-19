@@ -10,21 +10,38 @@ import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 public final class BridgeLineCodec {
     public static final int MAX_LINE_BYTES = 256 * 1024;
     public static final int MAX_SESSION_BYTES = 4 * 1024 * 1024;
     public static final int MAX_ANSWER_BYTES = 8 * 1024;
-    private static final int PROTOCOL_VERSION = 1;
+    private static final int PROTOCOL_VERSION_1 = 1;
+    private static final int PROTOCOL_VERSION_2 = 2;
     private static final JsonMapper MAPPER = JsonMapper.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             .build();
+    private final int requestProtocolVersion;
+
+    public BridgeLineCodec() {
+        this(PROTOCOL_VERSION_2);
+    }
+
+    public BridgeLineCodec(int requestProtocolVersion) {
+        if (requestProtocolVersion != PROTOCOL_VERSION_1 && requestProtocolVersion != PROTOCOL_VERSION_2) {
+            throw new IllegalArgumentException("Unsupported bridge protocol version.");
+        }
+        this.requestProtocolVersion = requestProtocolVersion;
+    }
+
+    public int protocolVersion() {
+        return requestProtocolVersion;
+    }
 
     public BridgeMessage decodeEvent(byte[] encodedLine) {
         Objects.requireNonNull(encodedLine, "encodedLine");
@@ -45,19 +62,21 @@ public final class BridgeLineCodec {
             }
             JsonNode version = root.get("protocolVersion");
             JsonNode type = root.get("type");
-            if (version == null || !version.isIntegralNumber() || version.intValue() != PROTOCOL_VERSION
+            if (version == null || !version.isIntegralNumber() || !version.canConvertToInt()
+                    || (version.intValue() != PROTOCOL_VERSION_1 && version.intValue() != PROTOCOL_VERSION_2)
                     || type == null || !type.isTextual() || type.textValue().isBlank()
                     || type.textValue().length() > 64) {
                 throw invalidEvent();
             }
-            validateEvent(root, type.textValue());
-            return new BridgeMessage(root.deepCopy());
+            List<EvidenceLocationView> evidence = validateEvent(root, type.textValue(), version.intValue());
+            return new BridgeMessage(root.deepCopy(), evidence);
         } catch (JsonProcessingException exception) {
             throw invalidEvent(exception);
         }
     }
 
-    private void validateEvent(JsonNode root, String type) {
+    private List<EvidenceLocationView> validateEvent(JsonNode root, String type, int protocolVersion) {
+        List<EvidenceLocationView> evidence = List.of();
         switch (type) {
             case "hello" -> {
                 fields(root, "protocolVersion", "type", "capabilities");
@@ -75,11 +94,19 @@ public final class BridgeLineCodec {
                 fields(root, "protocolVersion", "type", "message"); text(root, "message", 1024);
             }
             case "question" -> {
-                fields(root, "protocolVersion", "type", "number", "total", "followUp", "prompt");
+                if (protocolVersion == PROTOCOL_VERSION_1) {
+                    fields(root, "protocolVersion", "type", "number", "total", "followUp", "prompt");
+                } else {
+                    fields(root, "protocolVersion", "type", "number", "total", "followUp", "prompt", "evidence");
+                }
                 int number = integer(root, "number", 1, 3);
                 int total = integer(root, "total", 1, 3);
                 if (number > total) throw invalidEvent();
-                bool(root, "followUp"); text(root, "prompt", 16_384);
+                boolean followUp = bool(root, "followUp");
+                text(root, "prompt", 16_384);
+                if (protocolVersion == PROTOCOL_VERSION_2) {
+                    evidence = evidence(root, followUp);
+                }
             }
             case "evaluation" -> {
                 fields(root, "protocolVersion", "type", "verdict", "score", "feedback",
@@ -117,6 +144,32 @@ public final class BridgeLineCodec {
             }
             default -> throw invalidEvent();
         }
+        return evidence;
+    }
+
+    private List<EvidenceLocationView> evidence(JsonNode root, boolean followUp) {
+        JsonNode value = root.get("evidence");
+        if (value == null || !value.isArray() || value.size() > 10
+                || (followUp && !value.isEmpty()) || (!followUp && value.isEmpty())) {
+            throw invalidEvent();
+        }
+        List<EvidenceLocationView> result = new ArrayList<>();
+        Set<EvidenceLocationView> unique = new HashSet<>();
+        value.forEach(item -> {
+            if (!item.isObject()) throw invalidEvent();
+            fields(item, "relativePath", "startLine", "endLine");
+            try {
+                EvidenceLocationView location = new EvidenceLocationView(
+                        text(item, "relativePath", 4096),
+                        integer(item, "startLine", 1, Integer.MAX_VALUE),
+                        integer(item, "endLine", 1, Integer.MAX_VALUE));
+                if (!unique.add(location)) throw invalidEvent();
+                result.add(location);
+            } catch (IllegalArgumentException exception) {
+                throw invalidEvent(exception);
+            }
+        });
+        return List.copyOf(result);
     }
 
     private void fields(JsonNode root, String... expected) {
@@ -199,7 +252,7 @@ public final class BridgeLineCodec {
 
     private com.fasterxml.jackson.databind.node.ObjectNode request(String type) {
         var root = MAPPER.createObjectNode();
-        root.put("protocolVersion", PROTOCOL_VERSION);
+        root.put("protocolVersion", requestProtocolVersion);
         root.put("type", type);
         return root;
     }
@@ -238,13 +291,19 @@ public final class BridgeLineCodec {
 
     public static final class BridgeMessage {
         private final JsonNode node;
+        private final List<EvidenceLocationView> evidence;
 
-        private BridgeMessage(JsonNode node) {
+        private BridgeMessage(JsonNode node, List<EvidenceLocationView> evidence) {
             this.node = node;
+            this.evidence = List.copyOf(evidence);
         }
 
         public String type() {
             return node.path("type").textValue();
+        }
+
+        public int protocolVersion() {
+            return node.path("protocolVersion").intValue();
         }
 
         public String text(String field) {
@@ -301,6 +360,10 @@ public final class BridgeLineCodec {
             return List.copyOf(result);
         }
 
+        public List<EvidenceLocationView> evidence() {
+            return List.copyOf(evidence);
+        }
+
         @Override
         public String toString() {
             return "BridgeMessage[type=" + type() + "]";
@@ -309,6 +372,7 @@ public final class BridgeLineCodec {
 
     @Override
     public String toString() {
-        return "BridgeLineCodec[protocolVersion=1]";
+        return "BridgeLineCodec[requestProtocolVersion=" + requestProtocolVersion
+                + ", supportedEventVersions=[1, 2]]";
     }
 }

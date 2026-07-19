@@ -37,7 +37,8 @@ public sealed interface BridgeEvent permits BridgeEvent.HelloEvent, BridgeEvent.
         }
     }
 
-    record QuestionEvent(int protocolVersion, int number, int total, boolean followUp, String prompt)
+    record QuestionEvent(int protocolVersion, int number, int total, boolean followUp, String prompt,
+            List<BridgeEvidenceLocation> evidence)
             implements BridgeEvent {
         public QuestionEvent {
             BridgeProtocol.requireVersion(protocolVersion);
@@ -47,6 +48,11 @@ public sealed interface BridgeEvent permits BridgeEvent.HelloEvent, BridgeEvent.
                 throw new IllegalArgumentException("number cannot exceed total");
             }
             prompt = BridgeProtocol.requireText(prompt, "prompt", 16_384);
+            evidence = BridgeProtocol.copyEvidence(protocolVersion, followUp, evidence);
+        }
+
+        public QuestionEvent(int protocolVersion, int number, int total, boolean followUp, String prompt) {
+            this(protocolVersion, number, total, followUp, prompt, List.of());
         }
 
         @Override

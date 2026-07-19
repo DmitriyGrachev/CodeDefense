@@ -26,6 +26,8 @@ class BridgeJsonCodecTest {
         for (BridgeRequest request : requests) {
             assertEquals(request, codec.decodeRequest(codec.encodeRequest(request)));
         }
+        assertEquals(new BridgeRequest.SkipRequest(2),
+                codec.decodeRequest(codec.encodeRequest(new BridgeRequest.SkipRequest(2))));
     }
 
     @Test
@@ -59,6 +61,61 @@ class BridgeJsonCodecTest {
         for (BridgeEvent event : events) {
             assertEquals(event, codec.decodeEvent(codec.encodeEvent(event)));
         }
+    }
+
+    @Test
+    void preservesProtocolOneQuestionGoldenJsonWithoutEvidence() {
+        byte[] encoded = codec.encodeEvent(new BridgeEvent.QuestionEvent(1, 1, 3, false, "Explain it"));
+
+        assertEquals("{\"protocolVersion\":1,\"type\":\"question\",\"number\":1,\"total\":3,"
+                + "\"followUp\":false,\"prompt\":\"Explain it\"}\n",
+                new String(encoded, StandardCharsets.UTF_8));
+        assertEquals(new BridgeEvent.QuestionEvent(1, 1, 3, false, "Explain it"),
+                codec.decodeEvent(encoded));
+    }
+
+    @Test
+    void protocolTwoQuestionHasStrictReasonFreeEvidenceShape() {
+        BridgeEvent.QuestionEvent question = new BridgeEvent.QuestionEvent(2, 1, 3, false, "Explain it",
+                List.of(new BridgeEvidenceLocation("src/A.java", 4, 9)));
+
+        byte[] encoded = codec.encodeEvent(question);
+
+        assertEquals("{\"protocolVersion\":2,\"type\":\"question\",\"number\":1,\"total\":3,"
+                + "\"followUp\":false,\"prompt\":\"Explain it\",\"evidence\":[{\"relativePath\":"
+                + "\"src/A.java\",\"startLine\":4,\"endLine\":9}]}\n",
+                new String(encoded, StandardCharsets.UTF_8));
+        assertEquals(question, codec.decodeEvent(encoded));
+        assertFalse(new String(encoded, StandardCharsets.UTF_8).contains("reason"));
+    }
+
+    @Test
+    void protocolTwoFollowUpRequiresExplicitEmptyEvidence() {
+        String json = "{\"protocolVersion\":2,\"type\":\"question\",\"number\":1,\"total\":3,"
+                + "\"followUp\":true,\"prompt\":\"One more detail?\",\"evidence\":[]}\n";
+
+        assertEquals(new BridgeEvent.QuestionEvent(2, 1, 3, true, "One more detail?", List.of()),
+                codec.decodeEvent(bytes(json)));
+        assertThrows(BridgeProtocolException.class, () -> codec.decodeEvent(bytes(json.replace(",\"evidence\":[]", ""))));
+    }
+
+    @Test
+    void rejectsMalformedProtocolTwoEvidence() {
+        String prefix = "{\"protocolVersion\":2,\"type\":\"question\",\"number\":1,\"total\":3,"
+                + "\"followUp\":false,\"prompt\":\"Explain\",\"evidence\":";
+        assertThrows(BridgeProtocolException.class, () -> codec.decodeEvent(bytes(prefix + "[]}\n")));
+        assertThrows(BridgeProtocolException.class, () -> codec.decodeEvent(bytes(prefix
+                + "[{\"relativePath\":\"src/A.java\",\"startLine\":1,\"endLine\":1,\"reason\":\"secret\"}]}\n")));
+        assertThrows(BridgeProtocolException.class, () -> codec.decodeEvent(bytes(prefix
+                + "[{\"relativePath\":\"../A.java\",\"startLine\":1,\"endLine\":1}]}\n")));
+        assertThrows(BridgeProtocolException.class, () -> codec.decodeEvent(bytes(prefix
+                + "[{\"relativePath\":\"src/A.java\",\"startLine\":2,\"endLine\":1}]}\n")));
+        assertThrows(BridgeProtocolException.class, () -> codec.decodeEvent(bytes(prefix
+                + "[{\"relativePath\":\"src/A.java\",\"relativePath\":\"src/B.java\","
+                + "\"startLine\":1,\"endLine\":1}]}\n")));
+        assertThrows(BridgeProtocolException.class, () -> codec.decodeEvent(bytes(
+                "{\"protocolVersion\":1,\"type\":\"question\",\"number\":1,\"total\":3,"
+                        + "\"followUp\":false,\"prompt\":\"Explain\",\"evidence\":[]}\n")));
     }
 
     @Test
@@ -102,7 +159,7 @@ class BridgeJsonCodecTest {
     @Test
     void rejectsUnsupportedProtocolVersion() {
         BridgeProtocolException exception = assertThrows(BridgeProtocolException.class,
-                () -> codec.decodeRequest(bytes("{\"protocolVersion\":2,\"type\":\"skip\"}\n")));
+                () -> codec.decodeRequest(bytes("{\"protocolVersion\":3,\"type\":\"skip\"}\n")));
 
         assertEquals("Unsupported bridge protocol version.", exception.getMessage());
     }

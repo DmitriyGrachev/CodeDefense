@@ -39,7 +39,12 @@ public final class BridgeJsonCodec {
     }
 
     public byte[] encodeEvent(BridgeEvent event) {
-        ObjectNode node = base(type(event), event.protocolVersion());
+        return encodeEvent(event, event.protocolVersion());
+    }
+
+    byte[] encodeEvent(BridgeEvent event, int protocolVersion) {
+        BridgeProtocol.requireSupportedVersion(protocolVersion);
+        ObjectNode node = base(type(event), protocolVersion);
         switch (event) {
             case BridgeEvent.HelloEvent value -> strings(node, "capabilities", value.capabilities());
             case BridgeEvent.PreviewEvent value -> {
@@ -52,10 +57,21 @@ public final class BridgeJsonCodec {
             }
             case BridgeEvent.ConfirmationRequiredEvent value -> node.put("message", value.message());
             case BridgeEvent.QuestionEvent value -> {
+                List<BridgeEvidenceLocation> evidence = BridgeProtocol.copyEvidence(
+                        protocolVersion, value.followUp(), value.evidence());
                 node.put("number", value.number());
                 node.put("total", value.total());
                 node.put("followUp", value.followUp());
                 node.put("prompt", value.prompt());
+                if (protocolVersion == BridgeProtocol.VERSION_2) {
+                    ArrayNode locations = node.putArray("evidence");
+                    evidence.forEach(location -> {
+                        ObjectNode encoded = locations.addObject();
+                        encoded.put("relativePath", location.relativePath());
+                        encoded.put("startLine", location.startLine());
+                        encoded.put("endLine", location.endLine());
+                    });
+                }
             }
             case BridgeEvent.EvaluationEvent value -> {
                 node.put("verdict", value.verdict());
@@ -151,9 +167,15 @@ public final class BridgeJsonCodec {
                     yield new BridgeEvent.ConfirmationRequiredEvent(version, text(node, "message"));
                 }
                 case "question" -> {
-                    fields(node, "protocolVersion", "type", "number", "total", "followUp", "prompt");
+                    if (version == BridgeProtocol.VERSION_1) {
+                        fields(node, "protocolVersion", "type", "number", "total", "followUp", "prompt");
+                    } else {
+                        fields(node, "protocolVersion", "type", "number", "total", "followUp", "prompt",
+                                "evidence");
+                    }
                     yield new BridgeEvent.QuestionEvent(version, integer(node, "number"), integer(node, "total"),
-                            bool(node, "followUp"), text(node, "prompt"));
+                            bool(node, "followUp"), text(node, "prompt"),
+                            version == BridgeProtocol.VERSION_1 ? List.of() : evidence(node, "evidence"));
                 }
                 case "evaluation" -> {
                     fields(node, "protocolVersion", "type", "verdict", "score", "feedback",
@@ -249,7 +271,7 @@ public final class BridgeJsonCodec {
 
     private static int version(ObjectNode node) {
         int version = integer(node, "protocolVersion");
-        if (version != BridgeProtocol.VERSION) {
+        if (version != BridgeProtocol.VERSION_1 && version != BridgeProtocol.VERSION_2) {
             throw new BridgeProtocolException("Unsupported bridge protocol version.");
         }
         return version;
@@ -333,6 +355,23 @@ public final class BridgeJsonCodec {
             values.add(item.intValue());
         }
         return List.copyOf(values);
+    }
+
+    private static List<BridgeEvidenceLocation> evidence(ObjectNode node, String name) {
+        JsonNode value = node.get(name);
+        if (value == null || !value.isArray()) {
+            throw invalid();
+        }
+        java.util.ArrayList<BridgeEvidenceLocation> locations = new java.util.ArrayList<>();
+        for (JsonNode item : value) {
+            if (!(item instanceof ObjectNode object)) {
+                throw invalid();
+            }
+            fields(object, "relativePath", "startLine", "endLine");
+            locations.add(new BridgeEvidenceLocation(text(object, "relativePath"),
+                    integer(object, "startLine"), integer(object, "endLine")));
+        }
+        return List.copyOf(locations);
     }
 
     private static void strings(ObjectNode node, String name, List<String> values) {

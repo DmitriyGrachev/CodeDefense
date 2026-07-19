@@ -5,6 +5,7 @@ import dev.codedefense.jetbrains.process.BridgeLineCodec;
 import dev.codedefense.jetbrains.process.BridgeLineCodec.BridgeMessage;
 import dev.codedefense.jetbrains.process.CodeDefenseLauncher.BridgeLaunchSpec;
 import dev.codedefense.jetbrains.process.CodeDefenseLauncher.Selector;
+import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -23,7 +24,10 @@ public final class CodeDefenseToolWindowController implements Disposable {
     }
 
     interface Session {
-        void send(byte[] request);
+        void confirm(boolean accepted);
+        void answer(String answer);
+        void skip();
+        void provenanceConsent(String threadId, boolean consent);
         void cancel();
         CompletableFuture<Integer> completion();
     }
@@ -39,14 +43,16 @@ public final class CodeDefenseToolWindowController implements Disposable {
     private final StatusLoader statusLoader;
     private final PassportOpener passportOpener;
     private final Runnable gateRefresh;
+    private final EvidenceNavigator evidenceNavigator;
     private final ScheduledExecutorService debounce = Executors.newSingleThreadScheduledExecutor(
             Thread.ofVirtual().name("codedefense-status-refresh").factory());
     private final AtomicLong refreshGeneration = new AtomicLong();
     private final Object lock = new Object();
+    private long sessionGeneration;
     private volatile Session activeSession;
     private boolean starting;
     private volatile Path passportPath;
-    private byte[] pendingProvenanceRequest;
+    private PendingProvenance pendingProvenance;
     private boolean provenanceCapabilitySeen;
     private boolean confirmationPending;
 
@@ -69,6 +75,16 @@ public final class CodeDefenseToolWindowController implements Disposable {
     CodeDefenseToolWindowController(CodeDefenseToolWindowView view, SessionLauncher launcher,
             BridgeLineCodec codec, Consumer<Runnable> edt, Executor background,
             StatusLoader statusLoader, PassportOpener passportOpener, Runnable gateRefresh) {
+        this(view, launcher, codec, edt, background, statusLoader, passportOpener, gateRefresh,
+                location -> new EvidenceNavigator.NavigationResult(
+                        EvidenceNavigator.NavigationStatus.UNAVAILABLE,
+                        "Evidence navigation is unavailable."));
+    }
+
+    CodeDefenseToolWindowController(CodeDefenseToolWindowView view, SessionLauncher launcher,
+            BridgeLineCodec codec, Consumer<Runnable> edt, Executor background,
+            StatusLoader statusLoader, PassportOpener passportOpener, Runnable gateRefresh,
+            EvidenceNavigator evidenceNavigator) {
         this.view = Objects.requireNonNull(view, "view");
         this.launcher = Objects.requireNonNull(launcher, "launcher");
         this.codec = Objects.requireNonNull(codec, "codec");
@@ -77,6 +93,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
         this.statusLoader = statusLoader;
         this.passportOpener = passportOpener;
         this.gateRefresh = Objects.requireNonNull(gateRefresh, "gateRefresh");
+        this.evidenceNavigator = Objects.requireNonNull(evidenceNavigator, "evidenceNavigator");
     }
 
     public void preview(Selector selector, String selectorValue, String focus) {
@@ -102,13 +119,13 @@ public final class CodeDefenseToolWindowController implements Disposable {
     }
 
     private void beginProvenance(BridgeLaunchSpec spec, String threadId, boolean consent) {
-        byte[] request = codec.provenanceConsentRequest(threadId, consent);
+        byte[] validation = codec.provenanceConsentRequest(threadId, consent);
+        java.util.Arrays.fill(validation, (byte) 0);
         synchronized (lock) {
             if (starting || activeSession != null) {
-                java.util.Arrays.fill(request, (byte) 0);
                 throw new IllegalStateException("A CodeDefense session is already active.");
             }
-            pendingProvenanceRequest = request;
+            pendingProvenance = new PendingProvenance(threadId, consent);
             provenanceCapabilitySeen = false;
         }
         try { begin(spec); }
@@ -116,26 +133,44 @@ public final class CodeDefenseToolWindowController implements Disposable {
     }
 
     private void begin(BridgeLaunchSpec spec) {
+        long generation;
         synchronized (lock) {
             if (starting || activeSession != null) {
                 throw new IllegalStateException("A CodeDefense session is already active.");
             }
+            generation = ++sessionGeneration;
             starting = true;
         }
-        ui(() -> view.setSessionActive(true));
+        uiCurrent(generation, () -> {
+            view.clearEvidence();
+            view.setSessionActive(true);
+        });
         background.execute(() -> {
             try {
-                Session launched = launcher.launch(spec, this::onEvent);
+                Session launched = launcher.launch(spec, event -> onEvent(generation, event));
+                boolean stale;
                 synchronized (lock) {
-                    activeSession = launched;
-                    starting = false;
+                    stale = generation != sessionGeneration || !starting;
+                    if (!stale) {
+                        activeSession = launched;
+                        starting = false;
+                    }
                 }
-                sendProvenanceIfReady();
-                launched.completion().whenComplete((exit, failure) -> finish(failure));
+                if (stale) {
+                    launched.cancel();
+                    return;
+                }
+                sendProvenanceIfReady(generation);
+                launched.completion().whenComplete((exit, failure) -> finish(generation, failure));
             } catch (RuntimeException exception) {
-                synchronized (lock) { starting = false; }
-                ui(() -> {
+                synchronized (lock) {
+                    if (generation != sessionGeneration) return;
+                    starting = false;
+                    clearPendingProvenanceLocked();
+                }
+                uiCurrent(generation, () -> {
                     view.showError("CodeDefense could not be started.");
+                    view.clearEvidence();
                     view.setSessionActive(false);
                 });
             }
@@ -151,33 +186,39 @@ public final class CodeDefenseToolWindowController implements Disposable {
         }
         if (current == null) return;
         ui(() -> view.setConfirmationEnabled(false));
-        current.send(codec.confirmRequest(accepted));
+        current.confirm(accepted);
     }
 
     public void answer(String answer) {
-        byte[] request = codec.answerRequest(answer);
-        session().send(request);
+        Session current = session();
+        current.answer(answer);
         ui(view::clearAnswer);
     }
 
     public void skip() {
-        session().send(codec.skipRequest());
+        Session current = session();
+        current.skip();
         ui(view::clearAnswer);
     }
 
     public void cancel() {
         Session session;
+        long generation;
         synchronized (lock) {
+            generation = ++sessionGeneration;
             session = activeSession;
             activeSession = null;
             starting = false;
             confirmationPending = false;
+            clearPendingProvenanceLocked();
         }
-        clearPendingProvenance();
         if (session != null) {
             session.cancel();
         }
-        ui(() -> view.setSessionActive(false));
+        uiCurrent(generation, () -> {
+            view.clearEvidence();
+            view.setSessionActive(false);
+        });
     }
 
     private Session session() {
@@ -188,24 +229,31 @@ public final class CodeDefenseToolWindowController implements Disposable {
         return current;
     }
 
-    private void onEvent(BridgeMessage event) {
+    private void onEvent(long generation, BridgeMessage event) {
+        synchronized (lock) {
+            if (generation != sessionGeneration || (!starting && activeSession == null)) return;
+        }
         if (event.type().equals("hello")) {
             boolean requested;
             synchronized (lock) {
+                if (generation != sessionGeneration) return;
                 provenanceCapabilitySeen = event.strings("capabilities").contains("codexProvenanceV1");
-                requested = pendingProvenanceRequest != null;
+                requested = pendingProvenance != null;
             }
             if (requested && !provenanceCapabilitySeen) {
                 ui(() -> view.showError("Experimental Codex provenance is unavailable in this core."));
                 cancel();
                 return;
             }
-            sendProvenanceIfReady();
+            sendProvenanceIfReady(generation);
         }
         if (event.type().equals("confirmationRequired")) {
-            synchronized (lock) { confirmationPending = true; }
+            synchronized (lock) {
+                if (generation != sessionGeneration) return;
+                confirmationPending = true;
+            }
         }
-        ui(() -> {
+        uiCurrent(generation, () -> {
             switch (event.type()) {
                 case "hello" -> { }
                 case "preview" -> view.showPreview(safe(event.text("projectName")) + " | "
@@ -216,9 +264,15 @@ public final class CodeDefenseToolWindowController implements Disposable {
                     view.setConfirmationEnabled(true);
                     view.showConfirmation(safe(event.text("message")));
                 }
-                case "question" -> view.showQuestion((event.bool("followUp") ? "Follow-up" : "Question "
-                        + event.integer("number") + "/" + event.integer("total")) + ": "
-                        + safe(event.text("prompt")));
+                case "question" -> {
+                    boolean followUp = event.bool("followUp");
+                    view.showQuestion((followUp ? "Follow-up" : "Question "
+                            + event.integer("number") + "/" + event.integer("total")) + ": "
+                            + safe(event.text("prompt")));
+                    if (!followUp) {
+                        view.showEvidence(event.evidence(), evidenceNavigator::open);
+                    }
+                }
                 case "evaluation" -> view.showEvaluation(safe(event.text("verdict")) + " "
                         + event.integer("score") + "/100\n" + safe(event.text("feedback")));
                 case "questionScore" -> view.showQuestionScore("Question " + event.integer("questionNumber")
@@ -233,28 +287,40 @@ public final class CodeDefenseToolWindowController implements Disposable {
                 }
                 case "provenance" -> view.showProvenance(safe(event.text("status")) + "\n"
                         + safe(event.text("disclaimer")));
-                case "completed" -> view.showCompleted("Completed with exit code "
-                        + event.integer("exitCode") + ". Codex invoked: " + event.bool("codexInvoked"));
-                case "error" -> view.showError(safe(event.text("message")));
-                default -> view.showError("CodeDefense returned an unsupported bridge event.");
+                case "completed" -> {
+                    view.showCompleted("Completed with exit code "
+                            + event.integer("exitCode") + ". Codex invoked: " + event.bool("codexInvoked"));
+                    view.clearEvidence();
+                }
+                case "error" -> {
+                    view.showError(safe(event.text("message")));
+                    if (!"INVALID_ANSWER".equals(event.text("code"))) {
+                        view.clearEvidence();
+                    }
+                }
+                default -> {
+                    view.showError("CodeDefense returned an unsupported bridge event.");
+                    view.clearEvidence();
+                }
             }
         });
     }
 
-    private void sendProvenanceIfReady() {
+    private void sendProvenanceIfReady(long generation) {
         Session session;
-        byte[] request;
+        PendingProvenance pending;
         synchronized (lock) {
-            if (!provenanceCapabilitySeen || activeSession == null || pendingProvenanceRequest == null) return;
+            if (generation != sessionGeneration || !provenanceCapabilitySeen
+                    || activeSession == null || pendingProvenance == null) return;
             session = activeSession;
-            request = pendingProvenanceRequest;
-            pendingProvenanceRequest = null;
+            pending = pendingProvenance;
+            pendingProvenance = null;
         }
         try {
-            session.send(request);
+            session.provenanceConsent(pending.threadId(), pending.consent());
             ui(view::clearProvenanceConsent);
         } finally {
-            java.util.Arrays.fill(request, (byte) 0);
+            pending.clear();
         }
     }
 
@@ -267,16 +333,19 @@ public final class CodeDefenseToolWindowController implements Disposable {
                 .append(readiness).toString();
     }
 
-    private void finish(Throwable failure) {
+    private void finish(long generation, Throwable failure) {
         synchronized (lock) {
+            if (generation != sessionGeneration) return;
             activeSession = null;
             starting = false;
             confirmationPending = false;
+            clearPendingProvenanceLocked();
         }
-        ui(() -> {
+        uiCurrent(generation, () -> {
             if (failure != null) {
                 view.showError("CodeDefense bridge execution failed.");
             }
+            view.clearEvidence();
             view.setSessionActive(false);
         });
     }
@@ -333,6 +402,15 @@ public final class CodeDefenseToolWindowController implements Disposable {
         edt.accept(action);
     }
 
+    private void uiCurrent(long generation, Runnable action) {
+        ui(() -> {
+            synchronized (lock) {
+                if (generation != sessionGeneration) return;
+            }
+            action.run();
+        });
+    }
+
     private static String safe(String value) {
         if (value == null) {
             return "";
@@ -359,9 +437,31 @@ public final class CodeDefenseToolWindowController implements Disposable {
 
     private void clearPendingProvenance() {
         synchronized (lock) {
-            if (pendingProvenanceRequest != null) java.util.Arrays.fill(pendingProvenanceRequest, (byte) 0);
-            pendingProvenanceRequest = null;
-            provenanceCapabilitySeen = false;
+            clearPendingProvenanceLocked();
+        }
+    }
+
+    private void clearPendingProvenanceLocked() {
+        if (pendingProvenance != null) pendingProvenance.clear();
+        pendingProvenance = null;
+        provenanceCapabilitySeen = false;
+    }
+
+    private static final class PendingProvenance {
+        private String threadId;
+        private final boolean consent;
+
+        private PendingProvenance(String threadId, boolean consent) {
+            this.threadId = threadId;
+            this.consent = consent;
+        }
+
+        private String threadId() { return threadId; }
+        private boolean consent() { return consent; }
+        private void clear() { threadId = null; }
+
+        @Override public String toString() {
+            return "PendingProvenance[threadIdLength=" + (threadId == null ? 0 : threadId.length()) + "]";
         }
     }
 }

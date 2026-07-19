@@ -16,6 +16,7 @@ import com.intellij.openapi.wm.ex.ToolWindowManagerListener;
 import com.intellij.ui.content.ContentFactory;
 import dev.codedefense.jetbrains.gate.CodeDefenseProjectGateService;
 import dev.codedefense.jetbrains.gate.StagedGateCoordinator;
+import dev.codedefense.jetbrains.evidence.IntelliJEvidenceNavigator;
 import dev.codedefense.jetbrains.process.BridgeLineCodec;
 import dev.codedefense.jetbrains.process.BridgeProcess;
 import dev.codedefense.jetbrains.process.CodeDefenseLauncher;
@@ -56,7 +57,8 @@ public final class CodeDefenseToolWindowFactory implements ToolWindowFactory, Du
                 command -> Thread.ofVirtual().name("codedefense-plugin-launch").start(command),
                 () -> statusService.refresh(projectRoot),
                 path -> openPassport(project, path),
-                refreshSignals::manualRefresh);
+                refreshSignals::manualRefresh,
+                new IntelliJEvidenceNavigator(project, projectRoot));
         view.bind(controller);
         Disposable windowDisposable = Disposer.newDisposable("CodeDefense Tool Window");
         Disposer.register(project, windowDisposable);
@@ -146,7 +148,12 @@ public final class CodeDefenseToolWindowFactory implements ToolWindowFactory, Du
 
     private CodeDefenseToolWindowController.Session adapt(BridgeProcess process) {
         return new CodeDefenseToolWindowController.Session() {
-            @Override public void send(byte[] request) { process.send(request); }
+            @Override public void confirm(boolean accepted) { process.sendConfirm(accepted); }
+            @Override public void answer(String answer) { process.sendAnswer(answer); }
+            @Override public void skip() { process.sendSkip(); }
+            @Override public void provenanceConsent(String threadId, boolean consent) {
+                process.sendProvenanceConsent(threadId, consent);
+            }
             @Override public void cancel() { process.cancel(); }
             @Override public java.util.concurrent.CompletableFuture<Integer> completion() {
                 return process.completion();

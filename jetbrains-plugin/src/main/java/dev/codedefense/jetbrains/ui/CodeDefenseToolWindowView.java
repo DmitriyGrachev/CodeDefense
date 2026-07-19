@@ -1,6 +1,10 @@
 package dev.codedefense.jetbrains.ui;
 
 import dev.codedefense.jetbrains.gate.StagedGateView;
+import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
+import dev.codedefense.jetbrains.process.EvidenceLocationView;
+import java.util.List;
+import java.util.function.Function;
 
 public interface CodeDefenseToolWindowView {
     void setSessionActive(boolean active);
@@ -20,4 +24,7 @@ public interface CodeDefenseToolWindowView {
     default void clearProvenanceConsent() { }
     default void showGateStatus(StagedGateView value) { }
     default void prepareStagedDefense() { }
+    default void showEvidence(List<EvidenceLocationView> locations,
+            Function<EvidenceLocationView, EvidenceNavigator.NavigationResult> opener) { }
+    default void clearEvidence() { }
 }

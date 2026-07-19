@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.codedefense.bridge.BridgeEvent;
 import dev.codedefense.bridge.BridgeJsonCodec;
+import dev.codedefense.bridge.BridgeProtocol;
 import dev.codedefense.domain.CommitSelector;
 import dev.codedefense.domain.DefenseFocus;
 import dev.codedefense.domain.RangeSelector;
@@ -70,6 +71,24 @@ class BridgeProveCommandTest {
     }
 
     @Test
+    void selectsSupportedProtocolForTheBridgeSession() {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        AtomicInteger selectedVersion = new AtomicInteger();
+        BridgeProveCommand.BridgeDefenseRunner runner = (path, selector, focus, dryRun, session) -> {
+            selectedVersion.set(session.protocolVersion());
+            session.emit(new BridgeEvent.CompletedEvent(BridgeProtocol.VERSION_1, 0, false));
+            return 0;
+        };
+
+        int exit = new CommandLine(command(runner, output, new ByteArrayOutputStream()))
+                .execute("--protocol", "2", "--staged", "--dry-run");
+
+        assertEquals(0, exit);
+        assertEquals(2, selectedVersion.get());
+        assertEquals(2, events(output).getFirst().protocolVersion());
+    }
+
+    @Test
     void validationFailuresAreStableErrorEventsAndDoNotConstructWorkflow() {
         AtomicInteger calls = new AtomicInteger();
         BridgeProveCommand.BridgeDefenseRunner runner = (path, selector, focus, dryRun, session) -> {
@@ -77,7 +96,7 @@ class BridgeProveCommandTest {
             return 0;
         };
 
-        assertValidationError(runner, "--protocol", "2", "--staged");
+        assertValidationError(runner, "--protocol", "3", "--staged");
         assertValidationError(runner, "--protocol", "1");
         assertValidationError(runner, "--protocol", "1", "--staged", "--commit", "HEAD");
         assertValidationError(runner, "--protocol", "1", "--staged", "--focus", "free-form");

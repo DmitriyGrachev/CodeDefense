@@ -18,7 +18,7 @@
 - [x] Iteration 8.11 — JetBrains plugin over the local bridge protocol.
 - [ ] Iteration 8.12 — experimental consented Codex provenance.
 - [ ] Iteration 8.13 — live staged Passport gate and advisory IntelliJ commit check (implemented; compatibility and installed-plugin acceptance pending).
-- [ ] Iteration 8.14 — evidence navigator.
+- [ ] Iteration 8.14 — evidence navigator (implemented and offline-verified; Plugin Verifier and installed-plugin acceptance pending).
 - [ ] Iteration 8.15 — repository learning radar.
 - [ ] Iteration 8.16 — Passport-aware commit trailer and Cockpit polish.
 - [ ] Iteration 9 — reliability, release documentation, and submission readiness.

@@ -1,21 +1,99 @@
 package dev.codedefense.jetbrains.ui;
 
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.codedefense.jetbrains.gate.StagedGateView;
+import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
+import dev.codedefense.jetbrains.process.EvidenceLocationView;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.util.List;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.KeyStroke;
 import org.junit.jupiter.api.Test;
 
 class SwingCodeDefenseToolWindowViewTest {
+    @Test
+    void evidenceItemsAreAccessibleReplaceableAndContainOnlyPathAndRange() {
+        var view = new SwingCodeDefenseToolWindowView();
+        int[] opens = {0};
+        var first = new EvidenceLocationView("src/First.java", 4, 9);
+        var second = new EvidenceLocationView("src/Second.java", 12, 12);
+
+        view.showEvidence(List.of(first, second), location -> {
+            opens[0]++;
+            return new EvidenceNavigator.NavigationResult(
+                    EvidenceNavigator.NavigationStatus.OPENED, "Evidence opened.");
+        });
+
+        JButton firstButton = find(view.component(), JButton.class, "src/First.java:4–9");
+        assertTrue(firstButton.isFocusable());
+        assertEquals("Open evidence src/First.java lines 4 to 9",
+                firstButton.getAccessibleContext().getAccessibleName());
+        Object enterAction = firstButton.getInputMap(JComponent.WHEN_FOCUSED)
+                .get(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0));
+        assertNotNull(enterAction);
+        firstButton.getActionMap().get(enterAction).actionPerformed(
+                new ActionEvent(firstButton, ActionEvent.ACTION_PERFORMED, "keyboard"));
+        assertEquals(1, opens[0]);
+        assertFalse(componentText(view.component()).contains("SOURCE-CONTENT"));
+
+        view.showEvidence(List.of(second), ignored -> new EvidenceNavigator.NavigationResult(
+                EvidenceNavigator.NavigationStatus.OPENED, "Evidence opened."));
+        assertThrows(IllegalArgumentException.class,
+                () -> find(view.component(), JButton.class, "src/First.java:4–9"));
+        assertEquals(1, named(view.component(), JPanel.class, "codeDefense.evidencePanel")
+                .getComponentCount());
+    }
+
+    @Test
+    void unavailableEvidenceDisablesAfterOneAttemptAndShowsSafeMessage() {
+        var view = new SwingCodeDefenseToolWindowView();
+        int[] attempts = {0};
+        view.showEvidence(List.of(new EvidenceLocationView("Deleted.java", 1, 1)), location -> {
+            attempts[0]++;
+            return new EvidenceNavigator.NavigationResult(
+                    EvidenceNavigator.NavigationStatus.UNAVAILABLE, "Evidence file is unavailable.");
+        });
+        JButton button = find(view.component(), JButton.class, "Deleted.java:1");
+
+        button.doClick();
+        button.doClick();
+
+        assertEquals(1, attempts[0]);
+        assertFalse(button.isEnabled());
+        assertTrue(componentText(view.component()).contains("Evidence file is unavailable."));
+        view.clearEvidence();
+        assertEquals(0, named(view.component(), JPanel.class, "codeDefense.evidencePanel")
+                .getComponentCount());
+    }
+
+    @Test
+    void unsafeEvidenceIsDisabledAndExplainsThatItWasNotOpened() {
+        var view = new SwingCodeDefenseToolWindowView();
+        view.showEvidence(List.of(new EvidenceLocationView("Linked.java", 1, 1)), location ->
+                new EvidenceNavigator.NavigationResult(
+                        EvidenceNavigator.NavigationStatus.UNSAFE, "Evidence path is unsafe."));
+        JButton button = find(view.component(), JButton.class, "Linked.java:1");
+
+        button.doClick();
+
+        assertFalse(button.isEnabled());
+        assertTrue(componentText(view.component()).contains("Unsafe evidence was not opened."));
+    }
+
     @Test
     void actionButtonsUseASeparateRowFromChangeSelectors() {
         var view = new SwingCodeDefenseToolWindowView();
@@ -119,5 +197,18 @@ class SwingCodeDefenseToolWindowViewTest {
         if (component instanceof JButton button) return button.getText();
         if (component instanceof JLabel label) return label.getText();
         return null;
+    }
+
+    private String componentText(Component component) {
+        StringBuilder text = new StringBuilder();
+        if (component instanceof JButton button) text.append(button.getText()).append('\n');
+        if (component instanceof JLabel label) text.append(label.getText()).append('\n');
+        if (component instanceof javax.swing.text.JTextComponent field) {
+            text.append(field.getText()).append('\n');
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) text.append(componentText(child));
+        }
+        return text.toString();
     }
 }

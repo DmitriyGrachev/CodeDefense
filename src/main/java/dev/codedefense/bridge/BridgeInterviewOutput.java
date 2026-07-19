@@ -28,13 +28,24 @@ public final class BridgeInterviewOutput implements InterviewOutput {
     public void renderPrimaryQuestion(int current, int total, TechnicalQuestion question) {
         currentQuestion = current;
         questionTotal = total;
-        session.emit(new BridgeEvent.QuestionEvent(BridgeProtocol.VERSION, current, total, false,
-                sanitize(question.prompt(), "Question unavailable.")));
+        int version = session.protocolVersion();
+        List<BridgeEvidenceLocation> evidence = version == BridgeProtocol.VERSION_2
+                ? question.evidence().stream()
+                        .map(value -> new BridgeEvidenceLocation(value.path().replace('\\', '/'),
+                                value.startLine(), value.endLine()))
+                        .distinct()
+                        .sorted(java.util.Comparator.comparing(BridgeEvidenceLocation::relativePath)
+                                .thenComparingInt(BridgeEvidenceLocation::startLine)
+                                .thenComparingInt(BridgeEvidenceLocation::endLine))
+                        .toList()
+                : List.of();
+        session.emit(new BridgeEvent.QuestionEvent(version, current, total, false,
+                sanitize(question.prompt(), "Question unavailable."), evidence));
     }
 
     @Override
     public void renderInputValidationError(String message) {
-        session.emit(new BridgeEvent.ErrorEvent(BridgeProtocol.VERSION, "INVALID_ANSWER",
+        session.emit(new BridgeEvent.ErrorEvent(session.protocolVersion(), "INVALID_ANSWER",
                 sanitize(message, "Answer is invalid."), ExitCodes.INVALID_USAGE));
     }
 
@@ -50,8 +61,8 @@ public final class BridgeInterviewOutput implements InterviewOutput {
 
     @Override
     public void renderFollowUp(String followUpQuestion) {
-        session.emit(new BridgeEvent.QuestionEvent(BridgeProtocol.VERSION, currentQuestion, questionTotal, true,
-                sanitize(followUpQuestion, "Follow-up unavailable.")));
+        session.emit(new BridgeEvent.QuestionEvent(session.protocolVersion(), currentQuestion, questionTotal, true,
+                sanitize(followUpQuestion, "Follow-up unavailable."), List.of()));
     }
 
     @Override
@@ -61,18 +72,18 @@ public final class BridgeInterviewOutput implements InterviewOutput {
 
     @Override
     public void renderQuestionScore(int questionNumber, int score) {
-        session.emit(new BridgeEvent.QuestionScoreEvent(BridgeProtocol.VERSION, questionNumber, score));
+        session.emit(new BridgeEvent.QuestionScoreEvent(session.protocolVersion(), questionNumber, score));
     }
 
     @Override
     public void renderSummary(InterviewSession interview) {
-        session.emit(new BridgeEvent.SummaryEvent(BridgeProtocol.VERSION,
+        session.emit(new BridgeEvent.SummaryEvent(session.protocolVersion(),
                 interview.results().stream().map(result -> result.finalScore()).toList(),
                 interview.overallScore(), interview.readiness().displayName()));
     }
 
     private BridgeEvent.EvaluationEvent evaluationEvent(AnswerEvaluation evaluation) {
-        return new BridgeEvent.EvaluationEvent(BridgeProtocol.VERSION, evaluation.verdict().name(), evaluation.score(),
+        return new BridgeEvent.EvaluationEvent(session.protocolVersion(), evaluation.verdict().name(), evaluation.score(),
                 sanitize(evaluation.feedback(), "Evaluation unavailable."),
                 sanitize(evaluation.understoodConcepts()), sanitize(evaluation.missingConcepts()));
     }

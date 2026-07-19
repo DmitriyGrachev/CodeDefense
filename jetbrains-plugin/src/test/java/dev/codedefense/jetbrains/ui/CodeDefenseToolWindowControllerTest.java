@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.codedefense.jetbrains.process.BridgeLineCodec;
 import dev.codedefense.jetbrains.process.CodeDefenseLauncher.BridgeLaunchSpec;
 import dev.codedefense.jetbrains.process.CodeDefenseLauncher.Selector;
+import dev.codedefense.jetbrains.process.EvidenceLocationView;
+import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +18,80 @@ import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 
 class CodeDefenseToolWindowControllerTest {
+    @Test
+    void primaryQuestionReplacesEvidenceWhileFollowUpRetainsItAndClickNavigatesOnce() {
+        FakeView view = new FakeView();
+        FakeLauncher launcher = new FakeLauncher();
+        List<EvidenceLocationView> opened = new ArrayList<>();
+        EvidenceNavigator navigator = location -> {
+            opened.add(location);
+            return new EvidenceNavigator.NavigationResult(
+                    EvidenceNavigator.NavigationStatus.OPENED, "Evidence opened.");
+        };
+        var controller = new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(),
+                Runnable::run, Runnable::run, null, null, () -> { }, navigator);
+        controller.start(Selector.STAGED, null, "balanced");
+
+        launcher.event(question(false, "src/First.java", 4, 9));
+        assertEquals(List.of(new EvidenceLocationView("src/First.java", 4, 9)), view.evidence);
+        view.openEvidence(0);
+        assertEquals(List.of(new EvidenceLocationView("src/First.java", 4, 9)), opened);
+
+        launcher.event("{\"protocolVersion\":2,\"type\":\"question\",\"number\":1,\"total\":3,"
+                + "\"followUp\":true,\"prompt\":\"Clarify\",\"evidence\":[]}\n");
+        assertEquals(List.of(new EvidenceLocationView("src/First.java", 4, 9)), view.evidence);
+
+        launcher.event(question(false, "src/Second.java", 2, 2));
+        assertEquals(List.of(new EvidenceLocationView("src/Second.java", 2, 2)), view.evidence);
+    }
+
+    @Test
+    void evidenceIsClearedForNewSessionCompletionAndError() {
+        FakeView view = new FakeView();
+        FakeLauncher launcher = new FakeLauncher();
+        EvidenceNavigator navigator = location -> new EvidenceNavigator.NavigationResult(
+                EvidenceNavigator.NavigationStatus.OPENED, "Evidence opened.");
+        var controller = new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(),
+                Runnable::run, Runnable::run, null, null, () -> { }, navigator);
+
+        controller.start(Selector.STAGED, null, "balanced");
+        launcher.event(question(false, "src/Main.java", 1, 1));
+        launcher.event("{\"protocolVersion\":2,\"type\":\"completed\",\"exitCode\":0,"
+                + "\"codexInvoked\":true}\n");
+        assertTrue(view.evidence.isEmpty());
+
+        launcher.session.completion.complete(0);
+        FakeLauncher second = new FakeLauncher();
+        controller = new CodeDefenseToolWindowController(view, second, new BridgeLineCodec(),
+                Runnable::run, Runnable::run, null, null, () -> { }, navigator);
+        view.evidence = List.of(new EvidenceLocationView("stale.java", 1, 1));
+        controller.start(Selector.STAGED, null, "balanced");
+        assertTrue(view.evidence.isEmpty());
+        second.event(question(false, "src/Other.java", 1, 1));
+        second.event("{\"protocolVersion\":2,\"type\":\"error\",\"code\":\"SAFE\","
+                + "\"message\":\"Safe failure\",\"exitCode\":8}\n");
+        assertTrue(view.evidence.isEmpty());
+    }
+
+    @Test
+    void recoverableInvalidAnswerErrorRetainsEvidenceForTheRepromptedQuestion() {
+        FakeView view = new FakeView();
+        FakeLauncher launcher = new FakeLauncher();
+        EvidenceNavigator navigator = location -> new EvidenceNavigator.NavigationResult(
+                EvidenceNavigator.NavigationStatus.OPENED, "Evidence opened.");
+        var controller = new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(),
+                Runnable::run, Runnable::run, null, null, () -> { }, navigator);
+        controller.start(Selector.STAGED, null, "balanced");
+        var expected = new EvidenceLocationView("src/Main.java", 7, 11);
+        launcher.event(question(false, expected.relativePath(), expected.startLine(), expected.endLine()));
+
+        launcher.event("{\"protocolVersion\":2,\"type\":\"error\",\"code\":\"INVALID_ANSWER\","
+                + "\"message\":\"Answer is invalid. Try again.\",\"exitCode\":2}\n");
+
+        assertEquals(List.of(expected), view.evidence);
+        assertTrue(view.text.contains("Answer is invalid. Try again."));
+    }
+
     @Test
     void previewStartsDryRunAndRendersTrustedMetadataWithoutConfirmation() {
         FakeView view = new FakeView();
@@ -136,6 +212,81 @@ class CodeDefenseToolWindowControllerTest {
     }
 
     @Test
+    void negotiatedProtocolControlsEveryOutboundRequest() {
+        FakeView view = new FakeView();
+        FakeLauncher launcher = new FakeLauncher(1);
+        var controller = controller(view, launcher);
+
+        controller.start(Selector.STAGED, null, "balanced", "private-thread-id", true);
+        launcher.event("{\"protocolVersion\":1,\"type\":\"hello\","
+                + "\"capabilities\":[\"codexProvenanceV1\"]}\n");
+        launcher.event("{\"protocolVersion\":1,\"type\":\"confirmationRequired\","
+                + "\"message\":\"Send bounded source?\"}\n");
+        controller.confirm(true);
+        controller.answer("bounded answer");
+        controller.skip();
+
+        assertEquals(4, launcher.requests.size());
+        assertTrue(launcher.requests.stream().allMatch(
+                request -> request.contains("\"protocolVersion\":1")));
+        assertTrue(launcher.requests.stream().anyMatch(request -> request.contains("provenanceConsent")));
+        assertTrue(launcher.requests.stream().anyMatch(request -> request.contains("\"type\":\"confirm\"")));
+        assertTrue(launcher.requests.stream().anyMatch(request -> request.contains("\"type\":\"answer\"")));
+        assertTrue(launcher.requests.stream().anyMatch(request -> request.contains("\"type\":\"skip\"")));
+    }
+
+    @Test
+    void cancelBeforeLauncherReturnsCancelsTheReturnedSessionWithoutPublishingIt() {
+        FakeView view = new FakeView();
+        SequencedLauncher launcher = new SequencedLauncher();
+        List<Runnable> background = new ArrayList<>();
+        var controller = lifecycleController(view, launcher, background::add);
+
+        controller.start(Selector.STAGED, null, "balanced");
+        controller.cancel();
+        background.getFirst().run();
+
+        assertTrue(launcher.sessions.getFirst().cancelled);
+        assertFalse(view.active);
+        assertThrows(IllegalStateException.class, () -> controller.answer("must not be accepted"));
+    }
+
+    @Test
+    void oldCompletionAfterNewStartCannotDeactivateTheNewSession() {
+        FakeView view = new FakeView();
+        SequencedLauncher launcher = new SequencedLauncher();
+        var controller = lifecycleController(view, launcher, Runnable::run);
+
+        controller.start(Selector.STAGED, null, "balanced");
+        ManualSession old = launcher.sessions.getFirst();
+        controller.cancel();
+        controller.start(Selector.STAGED, null, "testing");
+        ManualSession current = launcher.sessions.get(1);
+
+        old.completion.complete(0);
+        controller.answer("current answer");
+
+        assertTrue(view.active);
+        assertTrue(current.requests.stream().anyMatch(request -> request.contains("current answer")));
+    }
+
+    @Test
+    void lateOldEventsCannotReplaceEvidenceFromTheCurrentSession() {
+        FakeView view = new FakeView();
+        SequencedLauncher launcher = new SequencedLauncher();
+        var controller = lifecycleController(view, launcher, Runnable::run);
+
+        controller.start(Selector.STAGED, null, "balanced");
+        controller.cancel();
+        controller.start(Selector.STAGED, null, "testing");
+        launcher.event(1, question(false, "src/Current.java", 4, 5));
+
+        launcher.event(0, question(false, "src/Old.java", 1, 2));
+
+        assertEquals(List.of(new EvidenceLocationView("src/Current.java", 4, 5)), view.evidence);
+    }
+
+    @Test
     void defendStagedChangeOnlyPreparesPreviewAndNeverLaunchesASession() {
         FakeView view = new FakeView();
         FakeLauncher launcher = new FakeLauncher();
@@ -169,11 +320,34 @@ class CodeDefenseToolWindowControllerTest {
         return new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(), Runnable::run);
     }
 
+    private CodeDefenseToolWindowController lifecycleController(FakeView view,
+            CodeDefenseToolWindowController.SessionLauncher launcher, java.util.concurrent.Executor background) {
+        return new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(), Runnable::run,
+                background, null, null, () -> { }, location ->
+                        new EvidenceNavigator.NavigationResult(
+                                EvidenceNavigator.NavigationStatus.OPENED, "Opened."));
+    }
+
+    private static String question(boolean followUp, String path, int start, int end) {
+        return "{\"protocolVersion\":2,\"type\":\"question\",\"number\":1,\"total\":3,"
+                + "\"followUp\":" + followUp + ",\"prompt\":\"Explain\",\"evidence\":[{"
+                + "\"relativePath\":\"" + path + "\",\"startLine\":" + start
+                + ",\"endLine\":" + end + "}]}\n";
+    }
+
     private static final class FakeLauncher implements CodeDefenseToolWindowController.SessionLauncher {
         private final List<String> requests = new ArrayList<>();
-        private final FakeSession session = new FakeSession(requests);
+        private final FakeSession session;
         private Consumer<BridgeLineCodec.BridgeMessage> consumer;
         private BridgeLaunchSpec spec;
+
+        private FakeLauncher() {
+            this(1);
+        }
+
+        private FakeLauncher(int protocolVersion) {
+            session = new FakeSession(requests, protocolVersion);
+        }
 
         @Override
         public CodeDefenseToolWindowController.Session launch(BridgeLaunchSpec launchSpec,
@@ -191,20 +365,72 @@ class CodeDefenseToolWindowControllerTest {
     private static final class FakeSession implements CodeDefenseToolWindowController.Session {
         private final List<String> requests;
         private final CompletableFuture<Integer> completion = new CompletableFuture<>();
+        private final int protocolVersion;
         private boolean cancelled;
 
-        private FakeSession(List<String> requests) {
+        private FakeSession(List<String> requests, int protocolVersion) {
             this.requests = requests;
+            this.protocolVersion = protocolVersion;
         }
 
-        @Override public void send(byte[] request) {
-            requests.add(new String(request, StandardCharsets.UTF_8));
+        @Override public void confirm(boolean accepted) {
+            record(new BridgeLineCodec(protocolVersion).confirmRequest(accepted));
+        }
+        @Override public void answer(String answer) {
+            record(new BridgeLineCodec(protocolVersion).answerRequest(answer));
+        }
+        @Override public void skip() {
+            record(new BridgeLineCodec(protocolVersion).skipRequest());
+        }
+        @Override public void provenanceConsent(String threadId, boolean consent) {
+            record(new BridgeLineCodec(protocolVersion).provenanceConsentRequest(threadId, consent));
         }
         @Override public void cancel() {
             cancelled = true;
             completion.complete(130);
         }
         @Override public CompletableFuture<Integer> completion() { return completion; }
+        private void record(byte[] request) {
+            requests.add(new String(request, StandardCharsets.UTF_8));
+        }
+    }
+
+    private static final class SequencedLauncher implements CodeDefenseToolWindowController.SessionLauncher {
+        private final List<ManualSession> sessions = new ArrayList<>();
+        private final List<Consumer<BridgeLineCodec.BridgeMessage>> consumers = new ArrayList<>();
+
+        @Override
+        public CodeDefenseToolWindowController.Session launch(BridgeLaunchSpec launchSpec,
+                Consumer<BridgeLineCodec.BridgeMessage> eventConsumer) {
+            ManualSession session = new ManualSession();
+            sessions.add(session);
+            consumers.add(eventConsumer);
+            return session;
+        }
+
+        private void event(int index, String json) {
+            consumers.get(index).accept(new BridgeLineCodec().decodeEvent(
+                    json.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+
+    private static final class ManualSession implements CodeDefenseToolWindowController.Session {
+        private final List<String> requests = new ArrayList<>();
+        private final CompletableFuture<Integer> completion = new CompletableFuture<>();
+        private boolean cancelled;
+
+        @Override public void confirm(boolean accepted) { record(new BridgeLineCodec().confirmRequest(accepted)); }
+        @Override public void answer(String answer) { record(new BridgeLineCodec().answerRequest(answer)); }
+        @Override public void skip() { record(new BridgeLineCodec().skipRequest()); }
+        @Override public void provenanceConsent(String threadId, boolean consent) {
+            record(new BridgeLineCodec().provenanceConsentRequest(threadId, consent));
+        }
+        @Override public void cancel() { cancelled = true; }
+        @Override public CompletableFuture<Integer> completion() { return completion; }
+
+        private void record(byte[] request) {
+            requests.add(new String(request, StandardCharsets.UTF_8));
+        }
     }
 
     private static final class FakeView implements CodeDefenseToolWindowView {
@@ -216,6 +442,9 @@ class CodeDefenseToolWindowControllerTest {
         private boolean provenanceCleared;
         private boolean confirmationEnabled;
         private boolean stagedDefensePrepared;
+        private List<EvidenceLocationView> evidence = List.of();
+        private java.util.function.Function<EvidenceLocationView, EvidenceNavigator.NavigationResult>
+                evidenceOpener;
 
         @Override public void setSessionActive(boolean value) { active = value; }
         @Override public void setConfirmationEnabled(boolean value) { confirmationEnabled = value; }
@@ -232,5 +461,15 @@ class CodeDefenseToolWindowControllerTest {
         @Override public void clearProvenanceConsent() { provenanceCleared = true; }
         @Override public void showProvenance(String value) { text.add(value); }
         @Override public void prepareStagedDefense() { stagedDefensePrepared = true; }
+        @Override public void showEvidence(List<EvidenceLocationView> locations,
+                java.util.function.Function<EvidenceLocationView, EvidenceNavigator.NavigationResult> opener) {
+            evidence = List.copyOf(locations);
+            evidenceOpener = opener;
+        }
+        @Override public void clearEvidence() { evidence = List.of(); evidenceOpener = null; }
+
+        private EvidenceNavigator.NavigationResult openEvidence(int index) {
+            return evidenceOpener.apply(evidence.get(index));
+        }
     }
 }

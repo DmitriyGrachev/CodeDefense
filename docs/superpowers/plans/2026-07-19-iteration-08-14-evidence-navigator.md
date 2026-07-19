@@ -34,7 +34,7 @@
 - Produces: protocol constants `VERSION_1`, `VERSION_2`, `CURRENT_VERSION` and `BridgeSession.protocolVersion()`.
 - Produces: `QuestionEvent(..., String prompt, List<BridgeEvidenceLocation> evidence)`.
 
-- [ ] **Step 1: Write RED contract tests**
+- [x] **Step 1: Write RED contract tests**
 
 Use this record:
 
@@ -50,13 +50,13 @@ public record BridgeEvidenceLocation(String relativePath, int startLine, int end
 
 Tests cover portable relative paths, no `..`, no drive/absolute paths, no NUL/control characters, line bounds, safe `toString`, immutable unique sorted evidence, v1/v2 supported versions, and rejection of every other protocol number.
 
-- [ ] **Step 2: Run RED tests**
+- [x] **Step 2: Run RED tests**
 
 ```powershell
 mvn -Dtest=BridgeSessionTest,BridgeJsonCodecTest test
 ```
 
-- [ ] **Step 3: Implement version-aware session and DTOs**
+- [x] **Step 3: Implement version-aware session and DTOs**
 
 Keep the existing two-argument `BridgeSession` constructor defaulting to version 1 for compatibility. Add:
 
@@ -67,7 +67,7 @@ public int protocolVersion()
 
 `BridgeProtocol.requireSupportedVersion` accepts exactly 1 or 2. `QuestionEvent` defensively copies and validates at most 10 entries. `BridgeSession`/codec apply the version-aware rule: protocol 1 omits evidence, protocol 2 primary questions require 1–10 entries, and protocol 2 follow-ups require an empty list.
 
-- [ ] **Step 4: Run GREEN tests**
+- [x] **Step 4: Run GREEN tests**
 
 Run the same focused Maven command.
 
@@ -83,7 +83,7 @@ Run the same focused Maven command.
 - Consumes: version-aware `QuestionEvent`.
 - Produces: exact protocol-1 shape and protocol-2 `evidence` array.
 
-- [ ] **Step 1: Add golden JSON tests**
+- [x] **Step 1: Add golden JSON tests**
 
 Protocol 1 remains:
 
@@ -99,11 +99,11 @@ Protocol 2 becomes:
 
 Assert strict field sets for each version, 256-KiB line limit, duplicate and unknown field rejection, and protocol selection through `bridge prove --protocol 1|2`.
 
-- [ ] **Step 2: Implement conditional codec fields**
+- [x] **Step 2: Implement conditional codec fields**
 
 Never serialize an `evidence` property for version 1. Require it for protocol-2 primary questions and encode an empty array for protocol-2 follow-ups. Create `BridgeSession` with the requested supported protocol in `BridgeProveCommand`.
 
-- [ ] **Step 3: Run focused tests**
+- [x] **Step 3: Run focused tests**
 
 ```powershell
 mvn -Dtest=BridgeJsonCodecTest,BridgeProveCommandTest test
@@ -119,11 +119,11 @@ mvn -Dtest=BridgeJsonCodecTest,BridgeProveCommandTest test
 - Consumes: `TechnicalQuestion.evidence()`.
 - Produces: protocol-aware primary/follow-up question events.
 
-- [ ] **Step 1: Write failing output tests**
+- [x] **Step 1: Write failing output tests**
 
 For protocol 2, assert primary question evidence is mapped, normalized to `/`, sorted by path/start/end, distinct, and reason-free. Assert a follow-up event has an empty evidence list. For protocol 1, assert the encoder produces the old shape.
 
-- [ ] **Step 2: Implement evidence mapping**
+- [x] **Step 2: Implement evidence mapping**
 
 Map only:
 
@@ -136,7 +136,7 @@ new BridgeEvidenceLocation(
 
 Do not include `reason`, expected key points, learning goal, or analyzed source.
 
-- [ ] **Step 3: Run focused tests**
+- [x] **Step 3: Run focused tests**
 
 ```powershell
 mvn -Dtest=BridgeInterviewOutputTest,BridgeJsonCodecTest,BridgeSessionTest test
@@ -155,17 +155,17 @@ mvn -Dtest=BridgeInterviewOutputTest,BridgeJsonCodecTest,BridgeSessionTest test
 - Produces: launcher token `--protocol 2`.
 - Produces: `BridgeMessage.evidence()` as an immutable typed list.
 
-- [ ] **Step 1: Write RED plugin codec tests**
+- [x] **Step 1: Write RED plugin codec tests**
 
 Assert launcher requests protocol 2. Decode valid evidence and reject missing/unknown/duplicate fields, invalid ranges, unsafe paths, more than ten entries, duplicate entries, malformed UTF-8, and oversized lines. Assert decoded DTO/string forms expose only path/range metadata and never raw JSON.
 
 Also prove an override CLI that rejects protocol 2 before emitting any valid bridge event is retried exactly once with protocol 1. Never retry after any bridge event, confirmation, question, or other point where Codex could have been invoked.
 
-- [ ] **Step 2: Implement protocol-2 decoder**
+- [x] **Step 2: Implement protocol-2 decoder**
 
 Keep decoding protocol-1 fixtures for compatibility tests. Protocol-2 question messages require the exact evidence array. All other event shapes remain unchanged except their protocol number may be 2. The launcher/controller compatibility path may fall back to protocol 1 only for a clean pre-session unsupported-version rejection, and at most once.
 
-- [ ] **Step 3: Run focused plugin tests**
+- [x] **Step 3: Run focused plugin tests**
 
 ```powershell
 cd jetbrains-plugin
@@ -183,15 +183,15 @@ cd jetbrains-plugin
 - Produces: `NavigationResult open(EvidenceLocationView location)`.
 - Consumes: project root plus an injected editor opener in tests.
 
-- [ ] **Step 1: Write filesystem-boundary tests with `@TempDir`**
+- [x] **Step 1: Write filesystem-boundary tests with `@TempDir`**
 
 Cover valid existing file/line, `../`, absolute path, final symlink, intermediate directory symlink, missing file, directory, unreadable file where supported, a file shortened so the requested start line is beyond the current editor document, deleted file, and replacement by symlink after event receipt. Assert the opener is called only for a safe regular file with a still-valid start line.
 
-- [ ] **Step 2: Implement safe resolution**
+- [x] **Step 2: Implement safe resolution**
 
 Use real root/parent validation and `LinkOption.NOFOLLOW_LINKS` for the final file. Resolve the IntelliJ `VirtualFile` only after filesystem validation. Through an injected IntelliJ adapter, obtain the current document line count and reject a stale start line beyond EOF, then use `OpenFileDescriptor(project, virtualFile, startLine - 1, 0).navigate(true)`. Do not read raw file bytes or expose document text.
 
-- [ ] **Step 3: Run focused tests**
+- [x] **Step 3: Run focused tests**
 
 ```powershell
 .\gradlew.bat test --tests "dev.codedefense.jetbrains.evidence.*" --console=plain
@@ -210,15 +210,15 @@ Use real root/parent validation and `LinkOption.NOFOLLOW_LINKS` for the final fi
 - Consumes: decoded evidence list and `EvidenceNavigator`.
 - Produces: accessible clickable items and safe navigation messages.
 
-- [ ] **Step 1: Add RED controller and Swing tests**
+- [x] **Step 1: Add RED controller and Swing tests**
 
 Assert primary questions replace the previous evidence list, follow-ups retain the primary evidence visually but do not receive new locations, clicking calls the navigator exactly once, deleted/unsafe location is disabled with a message, keyboard activation works, and no source text is displayed.
 
-- [ ] **Step 2: Implement the evidence panel**
+- [x] **Step 2: Implement the evidence panel**
 
 Render labels like `src/A.java:4–9` as buttons/links below the current question. Clear them when the session completes, fails, or a new primary question arrives. Keep the action row responsive in narrow Tool Windows.
 
-- [ ] **Step 3: Run all plugin tests and build**
+- [x] **Step 3: Run all plugin tests and build**
 
 ```powershell
 .\gradlew.bat clean test buildPlugin --rerun-tasks --console=plain
@@ -230,6 +230,14 @@ Render labels like `src/A.java:4–9` as buttons/links below the current questio
 - Modify: `README.md`
 - Modify: `docs/implementation-checklist.md`
 - Modify: this plan's checkboxes after verification
+
+**Offline verification evidence (2026-07-20):**
+
+- Core `mvn clean verify` and packaging are green: 539 tests, 0 failures, 0 errors, 4 expected skips.
+- Plugin tests are green: 113 tests, 0 failures, 0 errors, 4 expected platform skips.
+- `buildPlugin` is green.
+- Contract and UI tests verify path/range-only evidence, no source snippets or evidence reasons, strict protocol 2 decoding, and the single pre-session protocol 2 to protocol 1 fallback.
+- Exact 261/262 Plugin Verifier and installed-plugin evidence-link acceptance have not been run; the gates below remain pending.
 
 - [ ] **Step 1: Run core and plugin verification**
 

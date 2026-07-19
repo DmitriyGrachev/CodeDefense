@@ -23,7 +23,7 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 @Command(name = "prove", mixinStandardHelpOptions = true,
-        description = "Run a change defense through NDJSON bridge protocol 1.")
+        description = "Run a change defense through a supported NDJSON bridge protocol.")
 public final class BridgeProveCommand implements java.util.concurrent.Callable<Integer> {
     @FunctionalInterface
     public interface BridgeDefenseRunner {
@@ -78,13 +78,16 @@ public final class BridgeProveCommand implements java.util.concurrent.Callable<I
 
     @Override
     public Integer call() {
-        BridgeSession session = new BridgeSession(
-                Objects.requireNonNull(inputFactory.get(), "bridge input"),
-                Objects.requireNonNull(outputFactory.get(), "bridge output"));
+        InputStream input = Objects.requireNonNull(inputFactory.get(), "bridge input");
+        OutputStream output = Objects.requireNonNull(outputFactory.get(), "bridge output");
+        BridgeSession session;
         try {
-            if (protocolVersion != BridgeProtocol.VERSION) {
-                return invalid(session, "Unsupported protocol version.");
-            }
+            session = new BridgeSession(input, output, protocolVersion);
+        } catch (IllegalArgumentException exception) {
+            return invalid(new BridgeSession(input, output, BridgeProtocol.VERSION_1),
+                    "Unsupported protocol version.");
+        }
+        try {
             ChangeSelector selector = selector();
             DefenseFocus selectedFocus = DefenseFocus.parse(focus);
             return runner.run(path, selector, selectedFocus, dryRun,
@@ -112,7 +115,7 @@ public final class BridgeProveCommand implements java.util.concurrent.Callable<I
     }
 
     private int invalid(BridgeSession session, String message) {
-        session.emit(new BridgeEvent.ErrorEvent(BridgeProtocol.VERSION, "INVALID_REQUEST",
+        session.emit(new BridgeEvent.ErrorEvent(session.protocolVersion(), "INVALID_REQUEST",
                 safeMessage(message), ExitCodes.INVALID_USAGE));
         return ExitCodes.INVALID_USAGE;
     }

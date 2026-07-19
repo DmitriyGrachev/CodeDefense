@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.codedefense.domain.AnswerEvaluation;
 import dev.codedefense.domain.CodeEvidence;
@@ -17,6 +18,8 @@ import dev.codedefense.interview.InterviewScorer;
 import dev.codedefense.interview.ReadinessClassifier;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +28,78 @@ import org.junit.jupiter.api.Test;
 
 class BridgeSessionTest {
     private final BridgeJsonCodec codec = new BridgeJsonCodec();
+
+    @Test
+    void supportsOnlyProtocolVersionsOneAndTwo() {
+        assertEquals(BridgeProtocol.VERSION_2, BridgeProtocol.CURRENT_VERSION);
+        assertEquals(BridgeProtocol.VERSION_1,
+                new BridgeSession(InputStream.nullInputStream(), OutputStream.nullOutputStream()).protocolVersion());
+        assertEquals(BridgeProtocol.VERSION_2,
+                new BridgeSession(InputStream.nullInputStream(), OutputStream.nullOutputStream(), 2)
+                        .protocolVersion());
+        assertThrows(IllegalArgumentException.class,
+                () -> new BridgeSession(InputStream.nullInputStream(), OutputStream.nullOutputStream(), 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BridgeSession(InputStream.nullInputStream(), OutputStream.nullOutputStream(), 3));
+    }
+
+    @Test
+    void validatesPortableEvidenceLocationsAndSafeMetadataOnlyStringForm() {
+        BridgeEvidenceLocation location = new BridgeEvidenceLocation("src/main/App.java", 4, 9);
+
+        assertEquals("src/main/App.java", location.relativePath());
+        assertTrue(location.toString().contains("src/main/App.java"));
+        assertFalse(location.toString().contains("reason"));
+        assertThrows(IllegalArgumentException.class, () -> new BridgeEvidenceLocation("../App.java", 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new BridgeEvidenceLocation("src/../App.java", 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new BridgeEvidenceLocation("/src/App.java", 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new BridgeEvidenceLocation("C:/src/App.java", 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new BridgeEvidenceLocation("C:src/App.java", 1, 1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BridgeEvidenceLocation("src/A:Stream.java", 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new BridgeEvidenceLocation("src\\App.java", 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new BridgeEvidenceLocation("src/\u0000App.java", 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new BridgeEvidenceLocation("src/\nApp.java", 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new BridgeEvidenceLocation("src/App.java", 0, 1));
+        assertThrows(IllegalArgumentException.class, () -> new BridgeEvidenceLocation("src/App.java", 2, 1));
+    }
+
+    @Test
+    void protocolTwoPrimaryEvidenceIsSortedUniqueAndImmutable() {
+        var first = new BridgeEvidenceLocation("src/A.java", 4, 9);
+        var second = new BridgeEvidenceLocation("src/B.java", 2, 3);
+
+        BridgeEvent.QuestionEvent question = new BridgeEvent.QuestionEvent(2, 1, 3, false, "Explain it",
+                List.of(second, first));
+
+        assertEquals(List.of(first, second), question.evidence());
+        assertThrows(UnsupportedOperationException.class, () -> question.evidence().add(first));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BridgeEvent.QuestionEvent(2, 1, 3, false, "Explain", List.of(first, first)));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BridgeEvent.QuestionEvent(2, 1, 3, false, "Explain",
+                        java.util.stream.IntStream.rangeClosed(1, 11)
+                                .mapToObj(line -> new BridgeEvidenceLocation("src/F" + line + ".java", line, line))
+                                .toList()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BridgeEvent.QuestionEvent(2, 1, 3, false, "Explain", List.of()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BridgeEvent.QuestionEvent(2, 1, 3, true, "Follow up", List.of(first)));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BridgeEvent.QuestionEvent(1, 1, 3, false, "Explain", List.of(first)));
+    }
+
+    @Test
+    void rejectsClientRequestsFromAnotherSupportedProtocol() {
+        ByteArrayOutputStream input = new ByteArrayOutputStream();
+        input.writeBytes(codec.encodeRequest(new BridgeRequest.SkipRequest(1)));
+        BridgeSession session = new BridgeSession(new ByteArrayInputStream(input.toByteArray()),
+                OutputStream.nullOutputStream(), 2);
+
+        BridgeProtocolException exception = assertThrows(BridgeProtocolException.class, session::readRequest);
+
+        assertEquals("Bridge request uses the wrong protocol version.", exception.getMessage());
+    }
 
     @Test
     void emitsDryRunOrderWithoutReadingConfirmation() {

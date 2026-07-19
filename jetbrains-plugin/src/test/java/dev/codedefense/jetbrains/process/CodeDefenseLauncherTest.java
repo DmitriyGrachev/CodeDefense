@@ -58,8 +58,11 @@ class CodeDefenseLauncherTest {
         List<String> command = launcher.command(project, spec);
 
         assertEquals(List.of(java.toRealPath(LinkOption.NOFOLLOW_LINKS).toString(), "-jar",
-                jar.toRealPath(LinkOption.NOFOLLOW_LINKS).toString(), "bridge", "prove", "--protocol", "1",
+                jar.toRealPath(LinkOption.NOFOLLOW_LINKS).toString(), "bridge", "prove", "--protocol", "2",
                 "--staged", "--focus", "testing", "--dry-run", project.toRealPath().toString()), command);
+        assertEquals("1", launcher.command(project, spec, 1).get(6));
+        assertEquals("2", launcher.command(project, spec, 2).get(6));
+        assertThrows(IllegalArgumentException.class, () -> launcher.command(project, spec, 3));
     }
 
     private boolean isWindows() {

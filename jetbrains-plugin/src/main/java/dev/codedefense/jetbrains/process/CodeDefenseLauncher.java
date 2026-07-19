@@ -49,10 +49,7 @@ final class JdkCodeDefenseLauncher implements CodeDefenseLauncher {
     private static final Duration TERMINATION_GRACE = Duration.ofSeconds(2);
     private final Path bundledJar;
     private final Path javaExecutable;
-    private final BridgeLineCodec codec;
-
     JdkCodeDefenseLauncher(Path bundledJar, Path javaHome) {
-        this.codec = new BridgeLineCodec();
         this.bundledJar = regularFile(bundledJar, "The bundled CodeDefense CLI is unavailable.");
         this.javaExecutable = new JavaExecutableResolver().resolve(javaHome);
     }
@@ -60,21 +57,23 @@ final class JdkCodeDefenseLauncher implements CodeDefenseLauncher {
     @Override
     public BridgeProcess launch(Path projectRoot, BridgeLaunchSpec spec, Consumer<BridgeMessage> eventConsumer) {
         Path workingDirectory = projectRoot(projectRoot);
-        try {
-            Process process = new ProcessBuilder(command(workingDirectory, spec))
-                    .directory(workingDirectory.toFile())
-                    .start();
-            return new BridgeProcess(process, codec, eventConsumer, TERMINATION_GRACE);
-        } catch (IOException exception) {
-            throw new BridgeTransportException("CodeDefense could not be started.", exception);
-        }
+        return new BridgeProcess(protocolVersion -> new ProcessBuilder(
+                command(workingDirectory, spec, protocolVersion))
+                .directory(workingDirectory.toFile()).start(), eventConsumer, TERMINATION_GRACE);
     }
 
     List<String> command(Path projectRoot, BridgeLaunchSpec spec) {
+        return command(projectRoot, spec, 2);
+    }
+
+    List<String> command(Path projectRoot, BridgeLaunchSpec spec, int protocolVersion) {
         Path root = projectRoot(projectRoot);
         Objects.requireNonNull(spec, "spec");
+        if (protocolVersion != 1 && protocolVersion != 2) {
+            throw new IllegalArgumentException("Unsupported bridge protocol version.");
+        }
         List<String> command = new ArrayList<>(List.of(javaExecutable.toString(), "-jar", bundledJar.toString(),
-                "bridge", "prove", "--protocol", "1"));
+                "bridge", "prove", "--protocol", Integer.toString(protocolVersion)));
         switch (spec.selector()) {
             case STAGED -> command.add("--staged");
             case COMMIT -> {

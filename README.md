@@ -163,7 +163,11 @@ On Windows, CodeDefense never directly launches `codex.cmd` or the extensionless
 
 ## IntelliJ IDEA plugin
 
-Iteration 8.11 adds a Windows-first CodeDefense Tool Window for IntelliJ IDEA 2026.1 Community and Ultimate modes. The plugin is a passive adapter: it launches the bundled shaded CLI JAR as a child Java process and exchanges bounded protocol-v1 NDJSON over stdin/stdout. Git capture, privacy filtering, Codex access, question generation, scoring, and Passport persistence remain in the CLI. The plugin does not read project source, run Git itself, parse Passport Markdown, or place answers and model text in IDE logs or settings.
+Iteration 8.11 adds a Windows-first CodeDefense Tool Window for IntelliJ IDEA 2026.1 Community and Ultimate modes. The plugin is a passive adapter: it launches the bundled shaded CLI JAR as a child Java process and exchanges bounded, versioned NDJSON over stdin/stdout. Git capture, privacy filtering, Codex access, question generation, scoring, and Passport persistence remain in the CLI. The plugin does not read project source, run Git itself, parse Passport Markdown, or place answers and model text in IDE logs or settings.
+
+Iteration 8.14 extends that bridge with protocol 2 evidence navigation. Primary questions carry only one to ten validated portable relative paths and line ranges; follow-ups carry no new evidence. The bridge never includes source snippets, evidence reasons, expected key points, or absolute paths. Protocol 1 remains compatible, and an override CLI that cleanly rejects protocol 2 before any valid bridge event or possible Codex invocation is retried once with protocol 1. There is no fallback after a bridge event, confirmation, question, or any other point where source could have been sent.
+
+Evidence links are resolved against the real project root before IntelliJ sees the file. Absolute paths, parent traversal, control characters, missing or unreadable files, directories, final symlinks, intermediate symlinks, paths outside the real root, and stale line ranges are not opened. IntelliJ resolves the `VirtualFile` only after those checks and opens a valid location at its cited line without reading or displaying source through the bridge.
 
 Build the core artifact before the isolated plugin build:
 
@@ -173,7 +177,7 @@ cd jetbrains-plugin
 .\gradlew.bat test verifyPlugin buildPlugin
 ```
 
-The plugin ZIP is written beneath `jetbrains-plugin/build/distributions/` and contains the plugin JAR plus `cli/codedefense.jar`. Install it through **Settings → Plugins → Install Plugin from Disk**, then open **View → Tool Windows → CodeDefense**. The Tool Window supports staged, commit, and range selectors; the four closed defense focus values; dry preview; explicit source confirmation; one-question-at-a-time answer/skip controls; cancellation; source-free Passport status; and opening only the exact regular non-symlink Passport path returned by a successful core event.
+The plugin ZIP is written beneath `jetbrains-plugin/build/distributions/` and contains the plugin JAR plus `cli/codedefense.jar`. Install it through **Settings → Plugins → Install Plugin from Disk**, then open **View → Tool Windows → CodeDefense**. The Tool Window supports staged, commit, and range selectors; the four closed defense focus values; dry preview; explicit source confirmation; one-question-at-a-time answer/skip controls; cancellation; source-free Passport status; safe path-and-line evidence links; and opening only the exact regular non-symlink Passport path returned by a successful core event.
 
 Plugin settings contain only the bundled/override CLI choice, an optional validated JAR path, the default selector, and the default focus. They never contain Codex credentials, prompts, source, questions, or answers. The plugin targets IntelliJ IDEA builds `261.*` and `262.*` on Windows and declares the bundled `Git4Idea` dependency. Its staged refresh and advisory commit integration use public IntelliJ Platform and Git4Idea APIs; it does not claim support for other JetBrains products or operating systems.
 
@@ -193,6 +197,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter. Iteration 8.12 is implemented behind an off-by-default kill switch and remains unchecked until a separately authorized real-thread acceptance read. Iteration 8.13 adds the source-free live staged Passport badge and advisory IntelliJ commit check; Iterations 8.14-8.16 remain future work. Final Iteration 9 remains future work.
+Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter. Iteration 8.12 is implemented behind an off-by-default kill switch and remains unchecked until a separately authorized real-thread acceptance read. Iteration 8.13 adds the source-free live staged Passport badge and advisory IntelliJ commit check. Iteration 8.14 is implemented and offline-verified, but remains pending exact Plugin Verifier and installed-plugin acceptance. Iterations 8.15-8.16 and final Iteration 9 remain future work.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

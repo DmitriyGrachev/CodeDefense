@@ -430,7 +430,7 @@ VerifyLatestChangePassportUseCase recaptures and compares the latest stored iden
 
 - [ ] **Step 4: Implement source-free Markdown.**
 
-Render exactly the headings Change identity, Status, Local assessment, Changed files, Decision defense, Counterfactual defense, Test prediction, and Privacy. Use QuestionResult.finalScore and InterviewSession for scores/readiness. Escape every model/user controlled field with MarkdownTextEscaper and do not render the answer.
+Render exactly the headings Change identity, Status, Local assessment, Changed files, Decision defense, Counterfactual defense, Test prediction, and Privacy. Use QuestionResult.finalScore and InterviewSession for scores/readiness. Persist only deterministic change metadata, evidence paths/ranges, structured verdicts/scores, and Java-owned category/overall scores/readiness. Keep model-generated questions, follow-up prompts, feedback, concepts, and all user answers outside the persisted artifact so model prose cannot reproduce staged source.
 
 - [ ] **Step 5: Re-run focused tests and commit.**
 

@@ -40,8 +40,8 @@ public final class MarkdownChangePassportRenderer {
             appendQuestion(markdown, result);
         }
         line(markdown, "## Privacy");
-        line(markdown, "This source-free educational artifact is not approval to merge or deploy, and does not claim Codex authored a change.");
-        line(markdown, "It omits staged source, diffs, blobs, internal model prompts and schemas, raw model JSON, user answers, expected key points, and evidence reasons."); line(markdown, "");
+        line(markdown, "This educational artifact contains only bounded change metadata and structured local assessment results.");
+        line(markdown, "It is not approval to merge or deploy and does not claim Codex authored the change."); line(markdown, "");
         line(markdown, metadata(passport));
         return markdown.toString();
     }
@@ -53,25 +53,18 @@ public final class MarkdownChangePassportRenderer {
     }
     private static void appendQuestion(StringBuilder markdown, QuestionResult result) {
         line(markdown, "## " + headingFor(result.question().id()));
-        line(markdown, "- Question: " + MarkdownTextEscaper.inline(result.question().prompt()));
         line(markdown, "- Evidence: " + evidence(result.question().evidence()));
-        appendEvaluation(markdown, "### Primary evaluation", result.primaryTurn(), false);
-        result.followUpTurn().ifPresent(turn -> appendEvaluation(markdown, "### Follow-up evaluation", turn, true));
+        appendEvaluation(markdown, "### Primary evaluation", result.primaryTurn());
+        result.followUpTurn().ifPresent(turn -> appendEvaluation(markdown, "### Follow-up evaluation", turn));
         line(markdown, "- Local final score: " + result.finalScore() + "/100");
         line(markdown, "");
     }
 
     private static void appendEvaluation(StringBuilder markdown, String heading,
-            dev.codedefense.domain.InterviewTurn turn, boolean includeQuestion) {
+            dev.codedefense.domain.InterviewTurn turn) {
         line(markdown, heading);
-        if (includeQuestion) {
-            line(markdown, "- Question: " + MarkdownTextEscaper.inline(turn.prompt()));
-        }
         line(markdown, "- Verdict: " + MarkdownTextEscaper.inline(turn.evaluation().verdict().name()));
         line(markdown, "- Score: " + turn.evaluation().score() + "/100");
-        line(markdown, "- Feedback: " + MarkdownTextEscaper.inline(turn.evaluation().feedback()));
-        line(markdown, "- Understood concepts: " + concepts(turn.evaluation().understoodConcepts()));
-        line(markdown, "- Knowledge gaps: " + concepts(turn.evaluation().missingConcepts()));
     }
     private static String headingFor(String questionId) {
         return switch (questionId) {
@@ -85,9 +78,6 @@ public final class MarkdownChangePassportRenderer {
         return evidence.stream()
                 .map(item -> MarkdownTextEscaper.inline(item.path()) + ":" + item.startLine() + "-" + item.endLine())
                 .collect(java.util.stream.Collectors.joining(", "));
-    }
-    private static String concepts(java.util.List<String> concepts) {
-        return concepts.stream().map(MarkdownTextEscaper::inline).collect(java.util.stream.Collectors.joining(", "));
     }
     private static void line(StringBuilder builder, String value) { builder.append(value).append('\n'); }
 }

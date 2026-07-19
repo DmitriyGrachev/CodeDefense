@@ -47,6 +47,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
     private volatile Path passportPath;
     private byte[] pendingProvenanceRequest;
     private boolean provenanceCapabilitySeen;
+    private boolean confirmationPending;
 
     CodeDefenseToolWindowController(CodeDefenseToolWindowView view, SessionLauncher launcher,
             BridgeLineCodec codec, Consumer<Runnable> edt) {
@@ -130,7 +131,15 @@ public final class CodeDefenseToolWindowController implements Disposable {
     }
 
     public void confirm(boolean accepted) {
-        session().send(codec.confirmRequest(accepted));
+        Session current;
+        synchronized (lock) {
+            if (!confirmationPending) return;
+            confirmationPending = false;
+            current = activeSession;
+        }
+        if (current == null) return;
+        ui(() -> view.setConfirmationEnabled(false));
+        current.send(codec.confirmRequest(accepted));
     }
 
     public void answer(String answer) {
@@ -150,6 +159,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
             session = activeSession;
             activeSession = null;
             starting = false;
+            confirmationPending = false;
         }
         clearPendingProvenance();
         if (session != null) {
@@ -180,6 +190,9 @@ public final class CodeDefenseToolWindowController implements Disposable {
             }
             sendProvenanceIfReady();
         }
+        if (event.type().equals("confirmationRequired")) {
+            synchronized (lock) { confirmationPending = true; }
+        }
         ui(() -> {
             switch (event.type()) {
                 case "hello" -> { }
@@ -187,7 +200,10 @@ public final class CodeDefenseToolWindowController implements Disposable {
                         + safe(event.text("changeKind")) + " | " + safe(event.text("focus")) + " | "
                         + event.integer("selectedFiles") + " files | +" + event.integer("addedLines")
                         + "/-" + event.integer("deletedLines"));
-                case "confirmationRequired" -> view.showConfirmation(safe(event.text("message")));
+                case "confirmationRequired" -> {
+                    view.setConfirmationEnabled(true);
+                    view.showConfirmation(safe(event.text("message")));
+                }
                 case "question" -> view.showQuestion((event.bool("followUp") ? "Follow-up" : "Question "
                         + event.integer("number") + "/" + event.integer("total")) + ": "
                         + safe(event.text("prompt")));
@@ -240,7 +256,11 @@ public final class CodeDefenseToolWindowController implements Disposable {
     }
 
     private void finish(Throwable failure) {
-        synchronized (lock) { activeSession = null; starting = false; }
+        synchronized (lock) {
+            activeSession = null;
+            starting = false;
+            confirmationPending = false;
+        }
         ui(() -> {
             if (failure != null) {
                 view.showError("CodeDefense bridge execution failed.");

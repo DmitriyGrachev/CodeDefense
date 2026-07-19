@@ -37,10 +37,11 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     private String passportPath;
 
     public SwingCodeDefenseToolWindowView() {
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        controls.add(new JLabel("Change:")); controls.add(selector); controls.add(selectorValue);
-        controls.add(new JLabel("Focus:")); controls.add(focus); controls.add(preview); controls.add(start);
-        controls.add(cancel); controls.add(refresh); controls.add(openPassport);
+        JPanel selectors = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        selectors.add(new JLabel("Change:")); selectors.add(selector); selectors.add(selectorValue);
+        selectors.add(new JLabel("Focus:")); selectors.add(focus);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        actions.add(preview); actions.add(start); actions.add(cancel); actions.add(refresh); actions.add(openPassport);
         JPanel confirmation = new JPanel(new FlowLayout(FlowLayout.LEFT));
         confirmation.add(accept); confirmation.add(decline);
         JPanel input = new JPanel(new BorderLayout(4, 4));
@@ -58,7 +59,7 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         provenanceControls.setVisible("true".equalsIgnoreCase(
                 System.getenv("CODEDEFENSE_EXPERIMENTAL_CODEX_PROVENANCE")));
         JPanel north = new JPanel(); north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
-        north.add(controls); north.add(provenanceControls);
+        north.add(selectors); north.add(actions); north.add(provenanceControls);
         root.add(north, BorderLayout.NORTH);
         root.add(new JScrollPane(output), BorderLayout.CENTER);
         root.add(south, BorderLayout.SOUTH);
@@ -77,8 +78,8 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
             else controller.start(selected(), selectorArgument(), selectedFocus());
         }));
         cancel.addActionListener(event -> controller.cancel());
-        accept.addActionListener(event -> controller.confirm(true));
-        decline.addActionListener(event -> controller.confirm(false));
+        accept.addActionListener(event -> confirm(controller, true));
+        decline.addActionListener(event -> confirm(controller, false));
         submit.addActionListener(event -> controller.answer(answer.getText()));
         skip.addActionListener(event -> controller.skip());
         refresh.addActionListener(event -> controller.refresh());
@@ -100,8 +101,11 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
 
     @Override public void setSessionActive(boolean active) {
         preview.setEnabled(!active); start.setEnabled(!active); cancel.setEnabled(active);
-        accept.setEnabled(active); decline.setEnabled(active); answer.setEnabled(active);
+        setConfirmationEnabled(false); answer.setEnabled(active);
         submit.setEnabled(active); skip.setEnabled(active);
+    }
+    @Override public void setConfirmationEnabled(boolean enabled) {
+        accept.setEnabled(enabled); decline.setEnabled(enabled);
     }
     @Override public void showPreview(String value) { append("Preview: " + value); }
     @Override public void showConfirmation(String value) { append(value); }
@@ -128,5 +132,10 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     private void invoke(Runnable action) {
         try { action.run(); }
         catch (IllegalArgumentException | IllegalStateException exception) { showError(exception.getMessage()); }
+    }
+
+    private void confirm(CodeDefenseToolWindowController controller, boolean accepted) {
+        setConfirmationEnabled(false);
+        controller.confirm(accepted);
     }
 }

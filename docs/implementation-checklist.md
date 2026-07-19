@@ -15,7 +15,7 @@
 - [x] Iteration 8.8 — change-scoped re-defense attempt timeline.
 - [x] Iteration 8.9 — portable source-free Change Handoff.
 - [x] Iteration 8.10 — evidence-grounded defense focus modes.
-- [ ] Iteration 8.11 — JetBrains plugin over the local bridge protocol.
+- [x] Iteration 8.11 — JetBrains plugin over the local bridge protocol.
 - [ ] Iteration 8.12 — experimental consented Codex provenance.
 - [ ] Iteration 9 — reliability, release documentation, and submission readiness.
 

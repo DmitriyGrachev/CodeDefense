@@ -73,6 +73,24 @@ class CodeDefenseToolWindowControllerTest {
     }
 
     @Test
+    void confirmationCanBeSentOnlyOncePerPrompt() {
+        FakeView view = new FakeView();
+        FakeLauncher launcher = new FakeLauncher();
+        var controller = controller(view, launcher);
+        controller.start(Selector.STAGED, null, "balanced");
+
+        launcher.event("{\"protocolVersion\":1,\"type\":\"confirmationRequired\","
+                + "\"message\":\"Bounded source will be sent.\"}\n");
+        controller.confirm(true);
+        controller.confirm(true);
+
+        assertEquals(1, launcher.requests.stream()
+                .filter(line -> line.contains("\"type\":\"confirm\""))
+                .count());
+        assertFalse(view.confirmationEnabled);
+    }
+
+    @Test
     void declineErrorCancelDoubleStartAndDisposeAreSafe() {
         FakeView view = new FakeView();
         FakeLauncher launcher = new FakeLauncher();
@@ -81,6 +99,8 @@ class CodeDefenseToolWindowControllerTest {
 
         assertThrows(IllegalStateException.class,
                 () -> controller.start(Selector.STAGED, null, "balanced"));
+        launcher.event("{\"protocolVersion\":1,\"type\":\"confirmationRequired\","
+                + "\"message\":\"Bounded source will be sent.\"}\n");
         controller.confirm(false);
         launcher.event("{\"protocolVersion\":1,\"type\":\"error\",\"code\":\"SAFE\","
                 + "\"message\":\"Safe failure\",\"exitCode\":8}\n");
@@ -88,6 +108,7 @@ class CodeDefenseToolWindowControllerTest {
         controller.dispose();
 
         assertTrue(launcher.requests.stream().anyMatch(line -> line.contains("\"accepted\":false")));
+        assertFalse(view.confirmationEnabled);
         assertTrue(view.text.contains("Safe failure"));
         assertTrue(launcher.session.cancelled);
         assertFalse(view.active);
@@ -163,8 +184,10 @@ class CodeDefenseToolWindowControllerTest {
         private boolean answerCleared;
         private String passportPath;
         private boolean provenanceCleared;
+        private boolean confirmationEnabled;
 
         @Override public void setSessionActive(boolean value) { active = value; }
+        @Override public void setConfirmationEnabled(boolean value) { confirmationEnabled = value; }
         @Override public void showPreview(String value) { text.add(value); }
         @Override public void showConfirmation(String value) { confirmationShown = true; text.add(value); }
         @Override public void showQuestion(String value) { text.add(value); }

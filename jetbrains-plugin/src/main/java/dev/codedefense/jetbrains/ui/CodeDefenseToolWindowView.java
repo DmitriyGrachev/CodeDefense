@@ -2,6 +2,7 @@ package dev.codedefense.jetbrains.ui;
 
 public interface CodeDefenseToolWindowView {
     void setSessionActive(boolean active);
+    void setConfirmationEnabled(boolean enabled);
     void showPreview(String value);
     void showConfirmation(String value);
     void showQuestion(String value);

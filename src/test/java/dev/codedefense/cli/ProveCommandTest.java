@@ -1,6 +1,8 @@
 package dev.codedefense.cli;
 
 import dev.codedefense.application.StagedChangeDefenseRunner;
+import dev.codedefense.application.GitChangeDefenseRunner;
+import dev.codedefense.domain.ChangeKind;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
 import java.io.StringReader;
@@ -59,5 +61,33 @@ class ProveCommandTest {
 
         assertEquals(ExitCodes.SUCCESS, commandLine.execute("--staged"));
         assertEquals(true, accepted.get());
+    }
+
+    @Test
+    void commitAndRangeSelectorsAreExclusiveAndDelegatedAsTypedValues() {
+        AtomicReference<ChangeKind> kind = new AtomicReference<>();
+        GitChangeDefenseRunner runner = (path, selector, dryRun, yes, out, err) -> {
+            kind.set(selector.kind());
+            return ExitCodes.SUCCESS;
+        };
+        CommandLine command = new CommandLine(new ProveCommand(runner));
+
+        assertEquals(ExitCodes.SUCCESS, command.execute("--commit", "HEAD~1", "repo"));
+        assertEquals(ChangeKind.COMMIT, kind.get());
+        assertEquals(ExitCodes.SUCCESS, command.execute("--range", "main...HEAD", "repo"));
+        assertEquals(ChangeKind.RANGE, kind.get());
+        assertEquals(ExitCodes.INVALID_USAGE,
+                command.execute("--staged", "--commit", "HEAD", "repo"));
+    }
+
+    @Test
+    void acceptsFourFocusModesAndRejectsFreeFormFocus() {
+        GitChangeDefenseRunner runner = (path, selector, dryRun, yes, out, err) -> ExitCodes.SUCCESS;
+        CommandLine command = new CommandLine(new ProveCommand(runner));
+        for (String focus : new String[] {"balanced", "architecture", "failure-modes", "testing"}) {
+            assertEquals(ExitCodes.SUCCESS, command.execute("--staged", "--focus", focus, "--dry-run"));
+        }
+        assertEquals(ExitCodes.INVALID_USAGE,
+                command.execute("--staged", "--focus", "invent-a-prompt", "--dry-run"));
     }
 }

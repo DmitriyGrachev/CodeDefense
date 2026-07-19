@@ -19,7 +19,7 @@ class ChangePassportServiceTest {
     @Test
     void savesCurrentWhenRecapturedIdentityMatches() {
         ChangePassport before = PassportTestFixtures.passport(PassportStatus.CURRENT);
-        StagedChangeSource source = ignored -> new CapturedStagedChange(before.change(), java.util.List.of());
+        StagedChangeSource source = capturingSource(before.change());
         AtomicReference<ChangePassport> saved = new AtomicReference<>();
         dev.codedefense.passport.ChangePassportStore store = new dev.codedefense.passport.ChangePassportStore() {
             public Path save(ChangePassport passport) { saved.set(passport); return Path.of("passport.md"); }
@@ -34,7 +34,7 @@ class ChangePassportServiceTest {
     void savesExpiredWhenIndexChangesBeforeSave() {
         ChangePassport before = PassportTestFixtures.passport(PassportStatus.CURRENT);
         dev.codedefense.domain.StagedChange changed = new dev.codedefense.domain.StagedChange(before.change().repositoryRoot(), before.change().repositoryIdentityHash(), before.change().baseCommit(), before.change().indexIdentity(), "e".repeat(64), before.change().files(), before.change().addedLines(), before.change().deletedLines());
-        StagedChangeSource source = ignored -> new CapturedStagedChange(changed, java.util.List.of());
+        StagedChangeSource source = capturingSource(changed);
         AtomicReference<ChangePassport> saved = new AtomicReference<>();
         dev.codedefense.passport.ChangePassportStore store = new dev.codedefense.passport.ChangePassportStore() {
             public Path save(ChangePassport passport) { saved.set(passport); return Path.of("passport.md"); }
@@ -67,6 +67,18 @@ class ChangePassportServiceTest {
         return new StagedChangeSource() {
             @Override public CapturedStagedChange capture(Path ignored) { throw new AssertionError("initial capture is not a recapture"); }
             @Override public StagedChangeIdentity captureIdentity(Path ignored) { return identity; }
+            @Override public dev.codedefense.domain.StagedChange inspect(Path ignored) {
+                throw new AssertionError("metadata inspection is not a recapture");
+            }
+        };
+    }
+
+    private static StagedChangeSource capturingSource(dev.codedefense.domain.StagedChange change) {
+        return new StagedChangeSource() {
+            @Override public CapturedStagedChange capture(Path ignored) {
+                return new CapturedStagedChange(change, java.util.List.of());
+            }
+            @Override public dev.codedefense.domain.StagedChange inspect(Path ignored) { return change; }
         };
     }
 }

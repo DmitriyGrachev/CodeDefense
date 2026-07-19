@@ -74,6 +74,30 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
 
     @Override
     public CapturedStagedChange capture(Path requestedPath) {
+        CapturedMetadata capturedMetadata = captureMetadata(requestedPath);
+        Path root = capturedMetadata.capturedIndex().root();
+        List<EntryWithFile> eligible = prioritizedEligible(capturedMetadata.files());
+        List<StagedHunk> hunks = new ArrayList<>();
+        for (EntryWithFile value : eligible) {
+            hunks.addAll(readHunks(root, value));
+        }
+        if (!capturedMetadata.capturedIndex().identity().equals(captureIndexAtRoot(root).identity())) {
+            throw new GitChangeException(GitChangeException.Kind.CHANGED_DURING_CAPTURE);
+        }
+        return new CapturedStagedChange(capturedMetadata.change(), hunks);
+    }
+
+    @Override
+    public StagedChangeIdentity captureIdentity(Path requestedPath) {
+        return captureIndex(requestedPath).identity();
+    }
+
+    @Override
+    public StagedChange inspect(Path requestedPath) {
+        return captureMetadata(requestedPath).change();
+    }
+
+    private CapturedMetadata captureMetadata(Path requestedPath) {
         CapturedIndex capturedIndex = captureIndex(requestedPath);
         if (!capturedIndex.identity().hasStagedChanges()) {
             throw new GitChangeException(GitChangeException.Kind.NO_STAGED_CHANGE);
@@ -110,21 +134,10 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                 changedFiles,
                 addedLines,
                 deletedLines);
-
-        List<EntryWithFile> eligible = prioritizedEligible(files);
-        List<StagedHunk> hunks = new ArrayList<>();
-        for (EntryWithFile value : eligible) {
-            hunks.addAll(readHunks(root, value));
-        }
         if (!capturedIndex.identity().equals(captureIndexAtRoot(root).identity())) {
             throw new GitChangeException(GitChangeException.Kind.CHANGED_DURING_CAPTURE);
         }
-        return new CapturedStagedChange(change, hunks);
-    }
-
-    @Override
-    public StagedChangeIdentity captureIdentity(Path requestedPath) {
-        return captureIndex(requestedPath).identity();
+        return new CapturedMetadata(capturedIndex, change, List.copyOf(files));
     }
 
     private CapturedIndex captureIndex(Path requestedPath) {
@@ -528,6 +541,9 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
     }
 
     private record CapturedIndex(Path root, List<RawEntry> rawEntries, StagedChangeIdentity identity) {
+    }
+
+    private record CapturedMetadata(CapturedIndex capturedIndex, StagedChange change, List<EntryWithFile> files) {
     }
 
     private static final class ParsedHunk {

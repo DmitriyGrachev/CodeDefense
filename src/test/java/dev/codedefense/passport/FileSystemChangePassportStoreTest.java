@@ -257,6 +257,80 @@ class FileSystemChangePassportStoreTest {
         assertArrayEquals(firstReceipt, Files.readAllBytes(sidecar));
     }
 
+    @Test
+    void repositoryQueryFiltersBeforeApplyingTheNewestReceiptLimit() {
+        ChangePassportPaths paths = ChangePassportPaths.under(directory);
+        java.util.concurrent.atomic.AtomicInteger ids = new java.util.concurrent.atomic.AtomicInteger();
+        FileSystemChangePassportStore store = new FileSystemChangePassportStore(paths,
+                new MarkdownChangePassportRenderer(), new PassportReceiptJsonCodec(),
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                () -> "00000000-0000-4000-8000-%012d".formatted(ids.incrementAndGet()));
+        store.save(passportWithRepository("a".repeat(64)));
+        for (int index = 0; index < 51; index++) {
+            store.save(passportWithRepository("e".repeat(64)));
+        }
+
+        List<StoredChangePassport> result = store.listByRepository("a".repeat(64), 50);
+
+        assertEquals(1, result.size());
+        assertEquals("a".repeat(64), result.getFirst().receipt().repositoryIdentityHash());
+    }
+
+    @Test
+    void repositoryAndKindQueryFiltersSameRepositoryCommitsBeforeApplyingTheLimit() {
+        ChangePassportPaths paths = ChangePassportPaths.under(directory);
+        java.util.concurrent.atomic.AtomicInteger ids = new java.util.concurrent.atomic.AtomicInteger();
+        FileSystemChangePassportStore store = new FileSystemChangePassportStore(paths,
+                new MarkdownChangePassportRenderer(), new PassportReceiptJsonCodec(),
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                () -> "10000000-0000-4000-8000-%012d".formatted(ids.incrementAndGet()));
+        store.save(passportWithIdentity("a".repeat(64), dev.codedefense.domain.ChangeKind.STAGED,
+                "c".repeat(64)));
+        for (int index = 0; index < 51; index++) {
+            store.save(passportWithIdentity("a".repeat(64), dev.codedefense.domain.ChangeKind.COMMIT,
+                    "f".repeat(40)));
+        }
+
+        List<StoredChangePassport> result = store.listByRepositoryAndKind(
+                "a".repeat(64), dev.codedefense.domain.ChangeKind.STAGED, 50);
+
+        assertEquals(1, result.size());
+        assertEquals(dev.codedefense.domain.ChangeKind.STAGED, result.getFirst().receipt().changeKind());
+    }
+
+    @Test
+    void repositoryQueryValidatesHashAndLimit() {
+        FileSystemChangePassportStore store = store(ChangePassportPaths.under(directory));
+        assertThrows(IllegalArgumentException.class, () -> store.listByRepository("not-a-hash", 1));
+        assertThrows(IllegalArgumentException.class, () -> store.listByRepository("a".repeat(64), 0));
+        assertThrows(IllegalArgumentException.class, () -> store.listByRepository("a".repeat(64), 51));
+        assertThrows(IllegalArgumentException.class, () -> store.listByRepositoryAndKind(
+                "not-a-hash", dev.codedefense.domain.ChangeKind.STAGED, 1));
+        assertThrows(NullPointerException.class, () -> store.listByRepositoryAndKind(
+                "a".repeat(64), null, 1));
+        assertThrows(IllegalArgumentException.class, () -> store.listByRepositoryAndKind(
+                "a".repeat(64), dev.codedefense.domain.ChangeKind.STAGED, 0));
+        assertThrows(IllegalArgumentException.class, () -> store.listByRepositoryAndKind(
+                "a".repeat(64), dev.codedefense.domain.ChangeKind.STAGED, 51));
+    }
+
+    private static dev.codedefense.domain.ChangePassport passportWithRepository(String repositoryHash) {
+        dev.codedefense.domain.ChangePassport original = PassportTestFixtures.passport(PassportStatus.CURRENT);
+        return passportWithIdentity(repositoryHash, original.changeKind(), original.sourceIdentity());
+    }
+
+    private static dev.codedefense.domain.ChangePassport passportWithIdentity(String repositoryHash,
+            dev.codedefense.domain.ChangeKind kind, String sourceIdentity) {
+        dev.codedefense.domain.ChangePassport original = PassportTestFixtures.passport(PassportStatus.CURRENT);
+        dev.codedefense.domain.StagedChange oldChange = original.change();
+        dev.codedefense.domain.StagedChange change = new dev.codedefense.domain.StagedChange(
+                oldChange.repositoryRoot(), repositoryHash, oldChange.baseCommit(), oldChange.indexIdentity(),
+                oldChange.diffFingerprint(), oldChange.files(), oldChange.addedLines(), oldChange.deletedLines());
+        return new dev.codedefense.domain.ChangePassport(change, kind, sourceIdentity,
+                original.analysis(), original.session(), original.createdAt(), original.model(),
+                original.statusAtCreation(), original.focus(), original.codexProvenance());
+    }
+
     private ChangePassportPaths preparedPaths() throws Exception {
         ChangePassportPaths paths = ChangePassportPaths.under(directory);
         Files.createDirectory(paths.rootDirectory());

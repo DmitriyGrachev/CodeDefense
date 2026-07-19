@@ -135,6 +135,36 @@ class CodeDefenseToolWindowControllerTest {
         assertTrue(view.text.stream().anyMatch(value -> value.contains("Exact change match")));
     }
 
+    @Test
+    void defendStagedChangeOnlyPreparesPreviewAndNeverLaunchesASession() {
+        FakeView view = new FakeView();
+        FakeLauncher launcher = new FakeLauncher();
+        var controller = controller(view, launcher);
+
+        controller.defendStagedChange();
+
+        assertTrue(view.stagedDefensePrepared);
+        assertEquals(null, launcher.spec);
+        assertTrue(launcher.requests.isEmpty());
+    }
+
+    @Test
+    void manualRefreshAndPassportSavedRequestGateRefresh() {
+        FakeView view = new FakeView();
+        FakeLauncher launcher = new FakeLauncher();
+        int[] gateRefreshes = {0};
+        var controller = new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(),
+                Runnable::run, Runnable::run, null, null, () -> gateRefreshes[0]++);
+
+        controller.refresh();
+        controller.start(Selector.STAGED, null, "balanced");
+        launcher.event("{\"protocolVersion\":1,\"type\":\"passportSaved\","+
+                "\"path\":\"C:/safe/passport.md\",\"status\":\"CURRENT\","+
+                "\"shortFingerprint\":\"abc123\"}\n");
+
+        assertEquals(2, gateRefreshes[0]);
+    }
+
     private CodeDefenseToolWindowController controller(FakeView view, FakeLauncher launcher) {
         return new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(), Runnable::run);
     }
@@ -185,6 +215,7 @@ class CodeDefenseToolWindowControllerTest {
         private String passportPath;
         private boolean provenanceCleared;
         private boolean confirmationEnabled;
+        private boolean stagedDefensePrepared;
 
         @Override public void setSessionActive(boolean value) { active = value; }
         @Override public void setConfirmationEnabled(boolean value) { confirmationEnabled = value; }
@@ -200,5 +231,6 @@ class CodeDefenseToolWindowControllerTest {
         @Override public void clearAnswer() { answerCleared = true; }
         @Override public void clearProvenanceConsent() { provenanceCleared = true; }
         @Override public void showProvenance(String value) { text.add(value); }
+        @Override public void prepareStagedDefense() { stagedDefensePrepared = true; }
     }
 }

@@ -1,7 +1,9 @@
 package dev.codedefense.jetbrains.ui;
 
 import dev.codedefense.jetbrains.process.CodeDefenseLauncher.Selector;
+import dev.codedefense.jetbrains.gate.StagedGateView;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.FlowLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -25,6 +27,9 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     private final JButton cancel = new JButton("Cancel");
     private final JButton refresh = new JButton("Refresh");
     private final JButton openPassport = new JButton("Open Passport");
+    private final JButton defendStaged = new JButton("Defend staged change");
+    private final JLabel gateBadge = new JLabel("UNAVAILABLE");
+    private final JLabel gateSummary = new JLabel("Status unavailable");
     private final JButton accept = new JButton("Send bounded source");
     private final JButton decline = new JButton("Decline");
     private final JTextArea output = new JTextArea();
@@ -37,11 +42,18 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     private String passportPath;
 
     public SwingCodeDefenseToolWindowView() {
+        selector.setName("codeDefense.changeSelector");
+        preview.setName("codeDefense.previewDefense");
+        gateBadge.setName("codeDefense.gateBadge");
+        gateSummary.setName("codeDefense.gateSummary");
+        JPanel gate = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        gate.add(new JLabel("Staged Passport:")); gate.add(gateBadge); gate.add(gateSummary);
         JPanel selectors = new JPanel(new FlowLayout(FlowLayout.LEFT));
         selectors.add(new JLabel("Change:")); selectors.add(selector); selectors.add(selectorValue);
         selectors.add(new JLabel("Focus:")); selectors.add(focus);
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        actions.add(preview); actions.add(start); actions.add(cancel); actions.add(refresh); actions.add(openPassport);
+        actions.add(preview); actions.add(start); actions.add(cancel); actions.add(refresh);
+        actions.add(defendStaged); actions.add(openPassport);
         JPanel confirmation = new JPanel(new FlowLayout(FlowLayout.LEFT));
         confirmation.add(accept); confirmation.add(decline);
         JPanel input = new JPanel(new BorderLayout(4, 4));
@@ -59,7 +71,7 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         provenanceControls.setVisible("true".equalsIgnoreCase(
                 System.getenv("CODEDEFENSE_EXPERIMENTAL_CODEX_PROVENANCE")));
         JPanel north = new JPanel(); north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
-        north.add(selectors); north.add(actions); north.add(provenanceControls);
+        north.add(gate); north.add(selectors); north.add(actions); north.add(provenanceControls);
         root.add(north, BorderLayout.NORTH);
         root.add(new JScrollPane(output), BorderLayout.CENTER);
         root.add(south, BorderLayout.SOUTH);
@@ -83,6 +95,7 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         submit.addActionListener(event -> controller.answer(answer.getText()));
         skip.addActionListener(event -> controller.skip());
         refresh.addActionListener(event -> controller.refresh());
+        defendStaged.addActionListener(event -> controller.defendStagedChange());
         openPassport.addActionListener(event -> controller.openPassport());
     }
 
@@ -121,6 +134,41 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     @Override public void showProvenance(String value) { append("Experimental Codex provenance: " + value); }
     @Override public void clearProvenanceConsent() {
         threadId.setText(""); historyConsent.setSelected(false); provenance.setSelected(false);
+    }
+    @Override public void showGateStatus(StagedGateView value) {
+        String state = value.state().name().replace('_', ' ');
+        gateBadge.setText(state);
+        gateBadge.setForeground(color(value.state()));
+        String summary = switch (value.state()) {
+            case NO_STAGED_CHANGE -> "No staged files";
+            case UNAVAILABLE -> "Status unavailable";
+            case CURRENT -> counts(value) + " | " + value.shortFingerprint();
+            case UNDEFENDED, EXPIRED -> counts(value);
+        };
+        gateSummary.setText(summary);
+        gateBadge.getAccessibleContext().setAccessibleName(
+                "CodeDefense staged gate: " + state + ". " + summary);
+        gateSummary.getAccessibleContext().setAccessibleName(summary);
+    }
+    @Override public void prepareStagedDefense() {
+        selector.setSelectedItem(Selector.STAGED);
+        preview.setEnabled(true);
+        preview.requestFocusInWindow();
+    }
+
+    private String counts(StagedGateView value) {
+        return value.stagedFileCount() + " staged files | +" + value.addedLines()
+                + "/-" + value.deletedLines();
+    }
+
+    private Color color(StagedGateView.State state) {
+        return switch (state) {
+            case NO_STAGED_CHANGE -> Color.GRAY;
+            case UNDEFENDED -> new Color(190, 110, 0);
+            case CURRENT -> new Color(0, 128, 0);
+            case EXPIRED -> new Color(190, 0, 0);
+            case UNAVAILABLE -> new Color(170, 140, 0);
+        };
     }
 
     private void append(String value) {

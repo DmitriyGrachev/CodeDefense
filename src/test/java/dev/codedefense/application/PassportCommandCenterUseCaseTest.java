@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.codedefense.change.CapturedStagedChange;
+import dev.codedefense.change.StagedChangeSource;
 import dev.codedefense.cli.ExitCodes;
 import dev.codedefense.domain.PassportReceipt;
 import dev.codedefense.domain.PassportStatus;
@@ -35,7 +36,7 @@ class PassportCommandCenterUseCaseTest {
         ChangePassportStore store = store(stored);
         var passport = PassportTestFixtures.passport(PassportStatus.CURRENT);
         var verifier = new VerifyLatestChangePassportUseCase(
-                path -> new CapturedStagedChange(passport.change(), List.of()), store);
+                capturingSource(passport.change()), store);
         var useCase = new ShowLatestChangePassportUseCase(store, verifier,
                 new PassportTerminalRenderer());
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -114,6 +115,15 @@ class PassportCommandCenterUseCaseTest {
             @Override public List<StoredChangePassport> list(int limit) {
                 return values.stream().limit(limit).toList();
             }
+        };
+    }
+
+    private static StagedChangeSource capturingSource(dev.codedefense.domain.StagedChange change) {
+        return new StagedChangeSource() {
+            @Override public CapturedStagedChange capture(Path ignored) {
+                return new CapturedStagedChange(change, List.of());
+            }
+            @Override public dev.codedefense.domain.StagedChange inspect(Path ignored) { return change; }
         };
     }
 }

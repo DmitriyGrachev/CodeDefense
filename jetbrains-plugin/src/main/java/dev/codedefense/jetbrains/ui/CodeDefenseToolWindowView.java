@@ -1,5 +1,7 @@
 package dev.codedefense.jetbrains.ui;
 
+import dev.codedefense.jetbrains.gate.StagedGateView;
+
 public interface CodeDefenseToolWindowView {
     void setSessionActive(boolean active);
     void setConfirmationEnabled(boolean enabled);
@@ -16,4 +18,6 @@ public interface CodeDefenseToolWindowView {
     default void showPassportStatus(String value) { }
     default void showProvenance(String value) { }
     default void clearProvenanceConsent() { }
+    default void showGateStatus(StagedGateView value) { }
+    default void prepareStagedDefense() { }
 }

@@ -2,6 +2,7 @@ package dev.codedefense.application;
 
 import dev.codedefense.change.CapturedStagedChange;
 import dev.codedefense.change.StagedHunk;
+import dev.codedefense.change.StagedChangeSource;
 import dev.codedefense.change.StagedChangeContextBuilder;
 import dev.codedefense.change.StagedChangePreviewRenderer;
 import dev.codedefense.cli.ExitCodes;
@@ -19,6 +20,7 @@ import java.util.Optional;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,7 +33,7 @@ class StagedChangeDefenseRunnerTest {
         AtomicInteger runtimeCalls = new AtomicInteger();
         AtomicInteger passportCalls = new AtomicInteger();
         DefaultStagedChangeDefenseRunner runner = new DefaultStagedChangeDefenseRunner(
-                path -> captured(path), new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
+                source(this::captured), new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
                 () -> { confirmationConstructions.incrementAndGet(); return prompt -> false; },
                 out -> { runtimeCalls.incrementAndGet(); throw new AssertionError("runtime must stay lazy"); },
                 () -> { passportCalls.incrementAndGet(); throw new AssertionError("passport must stay lazy"); });
@@ -55,7 +57,7 @@ class StagedChangeDefenseRunnerTest {
         AtomicInteger passportCalls = new AtomicInteger();
         AtomicInteger confirmationConstructions = new AtomicInteger();
         DefaultStagedChangeDefenseRunner runner = new DefaultStagedChangeDefenseRunner(
-                this::captured, new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
+                source(this::captured), new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
                 () -> { confirmationConstructions.incrementAndGet(); return prompt -> false; },
                 out -> { runtimeCalls.incrementAndGet(); throw new AssertionError("runtime must stay lazy"); },
                 () -> { passportCalls.incrementAndGet(); throw new AssertionError("passport must stay lazy"); });
@@ -75,10 +77,10 @@ class StagedChangeDefenseRunnerTest {
     void confirmedRunUsesStagedAnalyzerInterviewAndPreSaveRecaptureInOrder() {
         List<String> events = new ArrayList<>();
         var passport = PassportTestFixtures.passport(PassportStatus.CURRENT);
-        var source = (dev.codedefense.change.StagedChangeSource) path -> {
+        var source = source(path -> {
             events.add("capture");
             return captured(path);
-        };
+        });
         dev.codedefense.passport.ChangePassportStore store = new dev.codedefense.passport.ChangePassportStore() {
             @Override public Path save(dev.codedefense.domain.ChangePassport value) {
                 events.add("save"); return Path.of("passport.md").toAbsolutePath();
@@ -119,7 +121,7 @@ class StagedChangeDefenseRunnerTest {
         ByteArrayOutputStream errors = new ByteArrayOutputStream();
         AtomicInteger confirmationConstructions = new AtomicInteger();
         DefaultStagedChangeDefenseRunner runner = new DefaultStagedChangeDefenseRunner(
-                path -> { throw new dev.codedefense.change.GitChangeException(dev.codedefense.change.GitChangeException.Kind.MALFORMED_DATA); },
+                source(path -> { throw new dev.codedefense.change.GitChangeException(dev.codedefense.change.GitChangeException.Kind.MALFORMED_DATA); }),
                 new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
                 () -> { confirmationConstructions.incrementAndGet(); return prompt -> true; },
                 out -> { throw new AssertionError("runtime must stay lazy"); }, () -> { throw new AssertionError("passport must stay lazy"); });
@@ -136,8 +138,8 @@ class StagedChangeDefenseRunnerTest {
     void tellsTheUserToRetryWhenTheStagedChangeMovesDuringCapture() {
         ByteArrayOutputStream errors = new ByteArrayOutputStream();
         DefaultStagedChangeDefenseRunner runner = new DefaultStagedChangeDefenseRunner(
-                path -> { throw new dev.codedefense.change.GitChangeException(
-                        dev.codedefense.change.GitChangeException.Kind.CHANGED_DURING_CAPTURE); },
+                source(path -> { throw new dev.codedefense.change.GitChangeException(
+                        dev.codedefense.change.GitChangeException.Kind.CHANGED_DURING_CAPTURE); }),
                 new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
                 () -> { throw new AssertionError("confirmation must stay lazy"); },
                 out -> { throw new AssertionError("runtime must stay lazy"); },
@@ -154,7 +156,7 @@ class StagedChangeDefenseRunnerTest {
     void noEligibleContextDoesNotConstructConfirmation() {
         AtomicInteger confirmationConstructions = new AtomicInteger();
         DefaultStagedChangeDefenseRunner runner = new DefaultStagedChangeDefenseRunner(
-                path -> emptyCaptured(path), new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
+                source(this::emptyCaptured), new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
                 () -> { confirmationConstructions.incrementAndGet(); return prompt -> true; },
                 out -> { throw new AssertionError("runtime must stay lazy"); },
                 () -> { throw new AssertionError("passport must stay lazy"); });
@@ -170,7 +172,7 @@ class StagedChangeDefenseRunnerTest {
         AtomicInteger runtimeCalls = new AtomicInteger();
         var passport = PassportTestFixtures.passport(PassportStatus.CURRENT);
         DefaultStagedChangeDefenseRunner runner = new DefaultStagedChangeDefenseRunner(
-                this::captured, new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
+                source(this::captured), new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
                 () -> { confirmationConstructions.incrementAndGet(); return prompt -> false; },
                 out -> {
                     runtimeCalls.incrementAndGet();
@@ -202,5 +204,12 @@ class StagedChangeDefenseRunnerTest {
                 "d".repeat(64), List.of(file), 1, 0);
         return new CapturedStagedChange(change,
                 List.of(new StagedHunk(file, 0, 0, 1, 1, "+not source", false)));
+    }
+
+    private static StagedChangeSource source(Function<Path, CapturedStagedChange> captures) {
+        return new StagedChangeSource() {
+            @Override public CapturedStagedChange capture(Path path) { return captures.apply(path); }
+            @Override public StagedChange inspect(Path path) { return captures.apply(path).change(); }
+        };
     }
 }

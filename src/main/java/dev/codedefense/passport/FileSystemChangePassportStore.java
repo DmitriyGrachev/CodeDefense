@@ -1,6 +1,7 @@
 package dev.codedefense.passport;
 
 import dev.codedefense.domain.ChangePassport;
+import dev.codedefense.domain.ChangeKind;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,6 +23,7 @@ import java.util.Optional;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Supplier;
+import java.util.function.Predicate;
 
 /** No-follow-link filesystem store for source-free Markdown Change Passports. */
 public final class FileSystemChangePassportStore implements ChangePassportStore {
@@ -129,6 +131,27 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
 
     @Override public List<StoredChangePassport> list(int limit) {
         if (limit < 1 || limit > 50) throw new IllegalArgumentException("limit must be between 1 and 50");
+        return listMatching(limit, receipt -> true);
+    }
+    @Override public List<StoredChangePassport> listByRepository(String repositoryIdentityHash, int limit) {
+        if (repositoryIdentityHash == null || !repositoryIdentityHash.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("repositoryIdentityHash is invalid");
+        }
+        if (limit < 1 || limit > 50) throw new IllegalArgumentException("limit must be between 1 and 50");
+        return listMatching(limit, receipt -> receipt.repositoryIdentityHash().equals(repositoryIdentityHash));
+    }
+    @Override public List<StoredChangePassport> listByRepositoryAndKind(String repositoryIdentityHash,
+            ChangeKind changeKind, int limit) {
+        if (repositoryIdentityHash == null || !repositoryIdentityHash.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("repositoryIdentityHash is invalid");
+        }
+        java.util.Objects.requireNonNull(changeKind, "changeKind");
+        if (limit < 1 || limit > 50) throw new IllegalArgumentException("limit must be between 1 and 50");
+        return listMatching(limit, receipt -> receipt.repositoryIdentityHash().equals(repositoryIdentityHash)
+                && receipt.changeKind() == changeKind);
+    }
+    private List<StoredChangePassport> listMatching(int limit,
+            Predicate<dev.codedefense.domain.PassportReceipt> filter) {
         try {
             if (!Files.exists(paths.rootDirectory(), LinkOption.NOFOLLOW_LINKS)) return List.of();
             directory(paths.rootDirectory());
@@ -139,13 +162,15 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
                         .filter(path -> path.getFileName().toString().endsWith(".json"))
                         .sorted(Comparator.comparing(FileSystemChangePassportStore::receiptTimeKey)
                                 .thenComparingInt(FileSystemChangePassportStore::receiptOrdinal).reversed())
-                        .limit(limit).toList();
+                        .toList();
                 java.util.ArrayList<StoredChangePassport> result = new java.util.ArrayList<>();
                 for (Path receipt : receipts) {
                     regular(receipt);
                     Path markdown = markdown(receipt);
                     regular(markdown);
-                    result.add(stored(markdown, receipt));
+                    StoredChangePassport value = stored(markdown, receipt);
+                    if (filter.test(value.receipt())) result.add(value);
+                    if (result.size() == limit) break;
                 }
                 return List.copyOf(result);
             }

@@ -19,6 +19,7 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdea("2026.1.4")
+        bundledPlugin("Git4Idea")
         testFramework(TestFrameworkType.Platform)
     }
     testImplementation(platform("org.junit:junit-bom:5.13.4"))

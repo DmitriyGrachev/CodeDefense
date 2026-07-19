@@ -38,6 +38,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
     private final Executor background;
     private final StatusLoader statusLoader;
     private final PassportOpener passportOpener;
+    private final Runnable gateRefresh;
     private final ScheduledExecutorService debounce = Executors.newSingleThreadScheduledExecutor(
             Thread.ofVirtual().name("codedefense-status-refresh").factory());
     private final AtomicLong refreshGeneration = new AtomicLong();
@@ -51,17 +52,23 @@ public final class CodeDefenseToolWindowController implements Disposable {
 
     CodeDefenseToolWindowController(CodeDefenseToolWindowView view, SessionLauncher launcher,
             BridgeLineCodec codec, Consumer<Runnable> edt) {
-        this(view, launcher, codec, edt, Runnable::run, null, null);
+        this(view, launcher, codec, edt, Runnable::run, null, null, () -> { });
     }
 
     CodeDefenseToolWindowController(CodeDefenseToolWindowView view, SessionLauncher launcher,
             BridgeLineCodec codec, Consumer<Runnable> edt, Executor background) {
-        this(view, launcher, codec, edt, background, null, null);
+        this(view, launcher, codec, edt, background, null, null, () -> { });
     }
 
     CodeDefenseToolWindowController(CodeDefenseToolWindowView view, SessionLauncher launcher,
             BridgeLineCodec codec, Consumer<Runnable> edt, Executor background,
             StatusLoader statusLoader, PassportOpener passportOpener) {
+        this(view, launcher, codec, edt, background, statusLoader, passportOpener, () -> { });
+    }
+
+    CodeDefenseToolWindowController(CodeDefenseToolWindowView view, SessionLauncher launcher,
+            BridgeLineCodec codec, Consumer<Runnable> edt, Executor background,
+            StatusLoader statusLoader, PassportOpener passportOpener, Runnable gateRefresh) {
         this.view = Objects.requireNonNull(view, "view");
         this.launcher = Objects.requireNonNull(launcher, "launcher");
         this.codec = Objects.requireNonNull(codec, "codec");
@@ -69,6 +76,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
         this.background = Objects.requireNonNull(background, "background");
         this.statusLoader = statusLoader;
         this.passportOpener = passportOpener;
+        this.gateRefresh = Objects.requireNonNull(gateRefresh, "gateRefresh");
     }
 
     public void preview(Selector selector, String selectorValue, String focus) {
@@ -87,6 +95,10 @@ public final class CodeDefenseToolWindowController implements Disposable {
     public void start(Selector selector, String selectorValue, String focus,
             String threadId, boolean consent) {
         beginProvenance(new BridgeLaunchSpec(selector, selectorValue, focus, false, true), threadId, consent);
+    }
+
+    public void defendStagedChange() {
+        ui(view::prepareStagedDefense);
     }
 
     private void beginProvenance(BridgeLaunchSpec spec, String threadId, boolean consent) {
@@ -270,6 +282,11 @@ public final class CodeDefenseToolWindowController implements Disposable {
     }
 
     public void refresh() {
+        gateRefresh.run();
+        refreshPassportStatus();
+    }
+
+    private void refreshPassportStatus() {
         if (statusLoader == null) return;
         background.execute(() -> {
             try {
@@ -282,9 +299,10 @@ public final class CodeDefenseToolWindowController implements Disposable {
     }
 
     public void scheduleRefresh() {
+        gateRefresh.run();
         long generation = refreshGeneration.incrementAndGet();
         debounce.schedule(() -> {
-            if (refreshGeneration.get() == generation) refresh();
+            if (refreshGeneration.get() == generation) refreshPassportStatus();
         }, 500, TimeUnit.MILLISECONDS);
     }
 

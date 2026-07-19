@@ -63,7 +63,7 @@ public final class CodeDefenseApplication {
         commandLine.addSubcommand("passport", passportCommand);
         commandLine.addSubcommand("bridge", new BridgeCommand());
         commandLine.setParameterExceptionHandler((exception, arguments) -> {
-            exception.getCommandLine().getErr().println(exception.getMessage());
+            exception.getCommandLine().getErr().println("Invalid command usage.");
             exception.getCommandLine().getErr().println("Try 'codedefense --help' for more information.");
             return ExitCodes.INVALID_USAGE;
         });

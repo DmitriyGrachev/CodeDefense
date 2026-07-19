@@ -33,7 +33,7 @@
 - Produces: `StagedChange StagedChangeSource.inspect(Path requestedPath)`.
 - Preserves: `capture(Path)` and `captureIdentity(Path)` behavior.
 
-- [ ] **Step 1: Write failing inspection tests**
+- [x] **Step 1: Write failing inspection tests**
 
 Add focused tests proving `inspect` returns normalized repository identity, all staged file metadata, line counts, and no hunks/blob content; also prove an empty index raises `GitChangeException.Kind.NO_STAGED_CHANGE` and mutation during inspection raises `CHANGED_DURING_CAPTURE`.
 
@@ -55,7 +55,7 @@ mvn -Dtest=GitCliStagedChangeSourceTest test
 
 Expected: compilation fails because `inspect(Path)` does not exist.
 
-- [ ] **Step 3: Add the boundary and refactor one capture path**
+- [x] **Step 3: Add the boundary and refactor one capture path**
 
 Use this exact public contract:
 
@@ -69,7 +69,7 @@ public interface StagedChangeSource {
 
 Inside `GitCliStagedChangeSource`, extract a private `CapturedMetadata` containing the existing `CapturedIndex` and constructed `StagedChange`. `inspect` performs raw/numstat parsing and the second identity check, but never calls `readHunks`. `capture` reuses the same metadata and then reads bounded hunks.
 
-- [ ] **Step 4: Run the focused test and observe GREEN**
+- [x] **Step 4: Run the focused test and observe GREEN**
 
 Run the same Maven command. Expected: all `GitCliStagedChangeSourceTest` tests pass with zero real Codex calls.
 
@@ -90,7 +90,7 @@ Run the same Maven command. Expected: all `GitCliStagedChangeSourceTest` tests p
 - Consumes: `StagedChangeSource.inspect(Path)` and a bounded repository-scoped Passport query.
 - Produces: `StagedPassportGateResult EvaluateStagedPassportGateUseCase.evaluate(Path)`.
 
-- [ ] **Step 1: Write domain and use-case tests**
+- [x] **Step 1: Write domain and use-case tests**
 
 Use exact enums:
 
@@ -132,7 +132,7 @@ mvn -Dtest=StagedPassportGateResultTest,EvaluateStagedPassportGateUseCaseTest te
 
 Expected: compilation fails because the gate types do not exist.
 
-- [ ] **Step 3: Implement deterministic evaluation**
+- [x] **Step 3: Implement deterministic evaluation**
 
 `evaluate(Path)` must:
 
@@ -149,7 +149,7 @@ Do not catch unexpected programming errors.
 
 Add `ChangePassportStore.listByRepository(String repositoryIdentityHash, int limit)` with a production filesystem implementation that filters by validated repository identity while selecting the bounded newest results. A default implementation may preserve adapter compatibility, but correctness tests must prove that more than 50 newer receipts from other repositories cannot hide a matching receipt.
 
-- [ ] **Step 4: Run GREEN tests**
+- [x] **Step 4: Run GREEN tests**
 
 Run the same focused Maven command. Expected: all focused tests pass.
 
@@ -167,7 +167,7 @@ Run the same focused Maven command. Expected: all focused tests pass.
 - Consumes: `EvaluateStagedPassportGateUseCase.evaluate(Path)`.
 - Produces: `codedefense passport gate --staged [PATH] --format json`.
 
-- [ ] **Step 1: Write failing codec and command tests**
+- [x] **Step 1: Write failing codec and command tests**
 
 Assert deterministic newline-terminated JSON with exact fields:
 
@@ -183,11 +183,11 @@ Assert `--staged` is required, only `--format json` is accepted in this adapter,
 mvn -Dtest=StagedPassportGateJsonCodecTest,PassportGateCommandTest,CliFoundationTest test
 ```
 
-- [ ] **Step 3: Implement codec and Picocli command**
+- [x] **Step 3: Implement codec and Picocli command**
 
 Register `PassportGateCommand` in `PassportCommand.subcommands`. The production constructor wires `GitCliStagedChangeSource`, `JdkProcessExecutor`, `FileSystemChangePassportStore`, and the use case. Write bytes as UTF-8 through Picocli's configured writer. Do not initialize runtime/Codex objects.
 
-- [ ] **Step 4: Run GREEN tests and package smoke**
+- [x] **Step 4: Run GREEN tests and package smoke**
 
 ```powershell
 mvn -Dtest=StagedPassportGateJsonCodecTest,PassportGateCommandTest,CliFoundationTest test
@@ -210,7 +210,7 @@ Expected: tests and package succeed; help exits 0 without Codex.
 - Produces: `StagedGateView refresh(Path projectRoot)` and observable coordinator updates.
 - Consumes later: Tool Window and pre-commit handler.
 
-- [ ] **Step 1: Write failing strict-decoder tests**
+- [x] **Step 1: Write failing strict-decoder tests**
 
 `StagedGateView` mirrors the core fields with immutable paths and derives:
 
@@ -226,15 +226,15 @@ Tests reject duplicate/unknown/missing fields, trailing tokens, invalid UTF-8, i
 <java> -jar <cli> passport gate --staged <root> --format json
 ```
 
-- [ ] **Step 2: Write coordinator RED tests**
+- [x] **Step 2: Write coordinator RED tests**
 
 With a fake scheduler/loader/observer, prove 750 ms debounce, one in-flight load, monotonic generations, stale result suppression, refresh after completion, observer removal, and disposal cleanup.
 
-- [ ] **Step 3: Implement service and coordinator**
+- [x] **Step 3: Implement service and coordinator**
 
 Reuse the bounded process rules already enforced by `PassportStatusService`: token list, exact project working directory, 15-second timeout, concurrent full drain, 256-KiB stdout cap, bounded stderr discarded from diagnostics, and graceful/forcible termination. Never include child output in exceptions. Child environment handling must use an explicit minimal allowlist sufficient for the nested CLI to resolve Git cross-platform (`PATH`, `SystemRoot`/`WINDIR`, and `PATHEXT` when present); arbitrary secret variables must not be inherited or logged.
 
-- [ ] **Step 4: Run plugin focused tests**
+- [x] **Step 4: Run plugin focused tests**
 
 ```powershell
 cd jetbrains-plugin
@@ -259,11 +259,11 @@ Expected: focused gate tests pass.
 - Consumes: `StagedGateCoordinator` updates.
 - Produces: project-scoped fresh/cached gate access for Task 6.
 
-- [ ] **Step 1: Add failing UI and event tests**
+- [x] **Step 1: Add failing UI and event tests**
 
 Assert text and accessible names for all five states. Assert project-open, Tool Window visibility, `GitRepository.GIT_REPO_CHANGE`, `.git/index` VFS change, Passport saved, manual refresh, and application/window activation schedule refresh. Assert source-editor changes outside `.git` do not immediately launch a gate process.
 
-- [ ] **Step 2: Declare the bundled Git plugin**
+- [x] **Step 2: Declare the bundled Git plugin**
 
 Add:
 
@@ -281,11 +281,11 @@ and:
 
 Only public `git4idea.repo.GitRepository.GIT_REPO_CHANGE` is permitted.
 
-- [ ] **Step 3: Implement project service and badge**
+- [x] **Step 3: Implement project service and badge**
 
 The project service owns the coordinator and supplies `cached()` plus `fresh(Duration timeout)`. The Tool Window registers/unregisters an observer through the project disposable. Render state text plus staged counts; do not rely on color alone. `Defend staged change` sets selector `STAGED` and focuses Preview without starting a session.
 
-- [ ] **Step 4: Run plugin tests**
+- [x] **Step 4: Run plugin tests**
 
 ```powershell
 .\gradlew.bat test --tests "dev.codedefense.jetbrains.ui.*" --tests "dev.codedefense.jetbrains.gate.*" --tests "dev.codedefense.jetbrains.PluginMetadataTest" --console=plain
@@ -305,7 +305,7 @@ The project service owns the coordinator and supplies `cached()` plus `fresh(Dur
 - Consumes: project gate service fresh result.
 - Produces: public IntelliJ `CheckinHandler.ReturnResult`.
 
-- [ ] **Step 1: Write failing handler tests with hand-written fakes**
+- [x] **Step 1: Write failing handler tests with hand-written fakes**
 
 Cover:
 
@@ -328,7 +328,7 @@ interface CommitGatePrompt {
 }
 ```
 
-- [ ] **Step 2: Implement only public IntelliJ APIs**
+- [x] **Step 2: Implement only public IntelliJ APIs**
 
 Extend `CheckinHandlerFactory`, inspect `CheckinProjectPanel` and Git staging records through public APIs, run the fresh check under bounded progress, and map decisions to `CheckinHandler.ReturnResult`. Register:
 
@@ -336,7 +336,7 @@ Extend `CheckinHandlerFactory`, inspect `CheckinProjectPanel` and Git staging re
 <checkinHandlerFactory implementation="dev.codedefense.jetbrains.gate.CodeDefenseCheckinHandlerFactory"/>
 ```
 
-- [ ] **Step 3: Run handler and verifier tests**
+- [x] **Step 3: Run handler and verifier tests**
 
 ```powershell
 .\gradlew.bat test --tests "dev.codedefense.jetbrains.gate.*" --console=plain
@@ -366,7 +366,7 @@ cd jetbrains-plugin
 
 Run Plugin Verifier against exact IDEA 261 and installed 262 builds. Expected: compatible, zero internal API usages.
 
-- [ ] **Step 2: Run disposable Git acceptance**
+- [x] **Step 2: Run disposable Git acceptance**
 
 Create a temporary Git repository and source-free receipt fixture. Prove transitions:
 

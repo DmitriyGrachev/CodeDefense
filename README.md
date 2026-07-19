@@ -95,6 +95,7 @@ java -jar target/codedefense.jar prove --commit HEAD .
 java -jar target/codedefense.jar prove --range main...HEAD --focus testing .
 java -jar target/codedefense.jar passport show .
 java -jar target/codedefense.jar passport verify .
+java -jar target/codedefense.jar passport gate --staged --format json .
 java -jar target/codedefense.jar passport list . --limit 10
 java -jar target/codedefense.jar passport export . --format json --output passport.json
 java -jar target/codedefense.jar passport timeline .
@@ -114,6 +115,16 @@ Portable handoffs use `passport handoff create`, `inspect`, and `match`. A `.cdh
 Staged source context is built from bounded unified hunks for at most 30 deterministically prioritized supported files. Repository paths are passed to Git as literal pathspecs, and HEAD/index identity is checked again after initial capture; if it changed, CodeDefense aborts and asks you to retry. Exact renames retain both old and new paths. A pure rename with no changed source lines is intentionally not enough to start a defense, and unchanged whole-file content is not sent as an artificial addition.
 
 Passports and proof output exclude staged source, diffs, blobs, answers, raw model JSON, expected key points, and evidence reasons. JSON receipts are educational records, not approval to merge or deploy. The optional experiment below adds narrowly bounded local app-server matching; the default proof mode still performs no session matching. Neither mode adds browser integration, GitHub/PR/CI/signing/cloud/dashboard integration.
+
+### Live staged Passport gate
+
+`passport gate --staged --format json .` is a read-only, staged-index-only status check. It returns exactly one of five states: `NO_STAGED_CHANGE` when the index has no entries; `UNDEFENDED` when the exact repository has no staged Passport history; `CURRENT` only when a staged receipt matches the full repository, change kind, base commit, index identity, and diff fingerprint; `EXPIRED` when staged history exists but that full identity changed; or `UNAVAILABLE` when Git capture, repository validation, or Passport storage cannot be read safely. A matching fingerprint alone is not enough for `CURRENT`.
+
+The IntelliJ Tool Window refreshes this badge from project-open, Tool Window visibility, Git repository, `.git/index`, Passport-save, manual-refresh, and application-activation signals. Signals are debounced for 750 ms. Cached status is display-only: every supported staged-index commit callback requests a mandatory fresh check with a bounded timeout before deciding.
+
+The commit integration is advisory. A non-`CURRENT` or unavailable fresh result offers `Defend change`, `Commit anyway`, or `Cancel`; `Commit anyway` applies only to that callback and is not persisted. CodeDefense installs no Git hook and does not hard-block commits. IntelliJ changelist or other non-index commit modes receive a separate unsupported-mode warning with `Commit anyway` or `Cancel`; they are not claimed as verified by the staged gate.
+
+Gate checks launch only the local metadata adapter. Its deterministic JSON is capped at 256 KiB and contains state/reason, fingerprint, attempt and line/file counts, plus at most 30 relative paths for `EXPIRED`; it contains no source, diffs, questions, answers, feedback, or model output. Background and pre-commit gate checks never invoke Codex, start a defense, or consume Codex credits.
 
 ## Experimental consented Codex provenance
 
@@ -164,7 +175,7 @@ cd jetbrains-plugin
 
 The plugin ZIP is written beneath `jetbrains-plugin/build/distributions/` and contains the plugin JAR plus `cli/codedefense.jar`. Install it through **Settings → Plugins → Install Plugin from Disk**, then open **View → Tool Windows → CodeDefense**. The Tool Window supports staged, commit, and range selectors; the four closed defense focus values; dry preview; explicit source confirmation; one-question-at-a-time answer/skip controls; cancellation; source-free Passport status; and opening only the exact regular non-symlink Passport path returned by a successful core event.
 
-Plugin settings contain only the bundled/override CLI choice, an optional validated JAR path, the default selector, and the default focus. They never contain Codex credentials, prompts, source, questions, or answers. Iteration 8.11 targets IntelliJ IDEA builds `261.*` and `262.*` on Windows; it does not claim support for other JetBrains products or operating systems.
+Plugin settings contain only the bundled/override CLI choice, an optional validated JAR path, the default selector, and the default focus. They never contain Codex credentials, prompts, source, questions, or answers. The plugin targets IntelliJ IDEA builds `261.*` and `262.*` on Windows and declares the bundled `Git4Idea` dependency. Its staged refresh and advisory commit integration use public IntelliJ Platform and Git4Idea APIs; it does not claim support for other JetBrains products or operating systems.
 
 ## Credits and opt-in live smoke
 
@@ -182,6 +193,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter and remains unchecked until installed-plugin acceptance. Iteration 8.12 is implemented behind an off-by-default kill switch and remains unchecked until a separately authorized real-thread acceptance read. Final Iteration 9 remains future work.
+Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter. Iteration 8.12 is implemented behind an off-by-default kill switch and remains unchecked until a separately authorized real-thread acceptance read. Iteration 8.13 adds the source-free live staged Passport badge and advisory IntelliJ commit check; Iterations 8.14-8.16 remain future work. Final Iteration 9 remains future work.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

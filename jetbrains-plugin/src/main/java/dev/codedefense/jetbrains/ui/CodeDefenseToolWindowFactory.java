@@ -16,6 +16,8 @@ import dev.codedefense.jetbrains.process.BridgeProcess;
 import dev.codedefense.jetbrains.process.CodeDefenseLauncher;
 import dev.codedefense.jetbrains.status.PassportStatusService;
 import dev.codedefense.jetbrains.settings.CodeDefenseSettings;
+import java.net.JarURLConnection;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -25,7 +27,8 @@ public final class CodeDefenseToolWindowFactory implements ToolWindowFactory, Du
     public void createToolWindowContent(Project project, ToolWindow toolWindow) {
         String basePath = project.getBasePath();
         if (basePath == null) return;
-        Path bundledJar = bundledCliPath();
+        Path bundledJar = bundledCliPath(CodeDefenseToolWindowFactory.class
+                .getResource("CodeDefenseToolWindowFactory.class"));
         if (bundledJar == null) return;
         CodeDefenseSettings settings = CodeDefenseSettings.getInstance();
         Path cliJar = settings.resolveCliJar(bundledJar);
@@ -61,26 +64,25 @@ public final class CodeDefenseToolWindowFactory implements ToolWindowFactory, Du
         controller.refresh();
     }
 
-    private static Path bundledCliPath() {
+    static Path bundledCliPath(URL classResource) {
+        if (classResource == null) return null;
         try {
-            var codeSource = CodeDefenseToolWindowFactory.class.getProtectionDomain().getCodeSource();
-            return codeSource == null ? null
-                    : bundledCliPath(Path.of(codeSource.getLocation().toURI()));
+            var connection = classResource.openConnection();
+            connection.setUseCaches(false);
+            if (!(connection instanceof JarURLConnection jarConnection)) return null;
+            Path pluginJar = Path.of(jarConnection.getJarFileURL().toURI())
+                    .toAbsolutePath().normalize();
+            Path libDirectory = pluginJar.getParent();
+            if (libDirectory == null || libDirectory.getFileName() == null
+                    || !libDirectory.getFileName().toString().equalsIgnoreCase("lib")) {
+                return null;
+            }
+            Path pluginRoot = libDirectory.getParent();
+            return pluginRoot == null ? null
+                    : pluginRoot.resolve("cli").resolve("codedefense.jar");
         } catch (Exception exception) {
             return null;
         }
-    }
-
-    static Path bundledCliPath(Path codeLocation) {
-        Path normalized = codeLocation.toAbsolutePath().normalize();
-        Path libDirectory = normalized.getParent();
-        if (libDirectory == null || libDirectory.getFileName() == null
-                || !libDirectory.getFileName().toString().equalsIgnoreCase("lib")) {
-            return null;
-        }
-        Path pluginRoot = libDirectory.getParent();
-        return pluginRoot == null ? null
-                : pluginRoot.resolve("cli").resolve("codedefense.jar");
     }
 
     private CodeDefenseToolWindowController.Session adapt(BridgeProcess process) {

@@ -46,7 +46,9 @@ class PluginMetadataTest {
                 StandardCharsets.UTF_8);
 
         assertFalse(factory.contains("PluginManagerCore"));
-        assertTrue(factory.contains("getProtectionDomain()"));
+        assertFalse(factory.contains("PluginManager.getPluginByClass("));
+        assertFalse(factory.contains("getProtectionDomain()"));
+        assertTrue(factory.contains("JarURLConnection"));
     }
 
     private String resource(String name) throws IOException {

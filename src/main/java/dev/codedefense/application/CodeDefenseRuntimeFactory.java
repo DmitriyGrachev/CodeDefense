@@ -20,12 +20,13 @@ public final class CodeDefenseRuntimeFactory implements CodeDefenseRuntimeProvid
  }
  CodeDefenseRuntime create(AiProvider provider,ObjectMapper mapper,CodexRuntimeConfig config,InterviewConfig interviewConfig,UserInput input,InterviewOutput output){
   ProjectAnalyzer analyzer=new AiProjectAnalyzer(provider,new ProjectAnalysisPromptFactory(),new ProjectAnalysisSchemaLoader(),new ProjectAnalysisValidator(),mapper,config);
+  java.util.function.Supplier<StagedChangeAnalyzer> stagedChangeAnalyzerFactory=()->new AiStagedChangeAnalyzer(provider,new StagedChangePromptFactory(),new StagedChangeSchemaLoader(),new StagedChangeAnalysisValidator(),mapper,config);
   AnswerEvaluator evaluator=new AiAnswerEvaluator(provider,new AnswerEvaluationPromptFactory(),new AnswerEvaluationSchemaLoader(),new AnswerEvaluationValidator(),mapper,config,interviewConfig.evaluationTimeout());
   InterviewRunner interview=new InterviewEngine(evaluator,input,output,new InterviewScorer(),new ReadinessClassifier(),interviewConfig);
   Clock clock=Clock.systemUTC(); ReportConfig reportConfig=ReportConfig.defaults();
   ReportNarrativeGenerator narrativeGenerator=new AiReportNarrativeGenerator(provider,new ReportNarrativePromptFactory(),new ReportNarrativeSchemaLoader(),new ReportNarrativeValidator(),mapper,config,reportConfig);
   ReportStore reportStore=new FileSystemReportStore(CodeDefensePaths.defaults(),reportConfig,new MarkdownReportRenderer(),clock);
   ReportService reportService=new UnderstandingReportService(narrativeGenerator,new DeterministicReportNarrativeFactory(),reportStore,clock,config.defaultModel());
-  return new CodeDefenseRuntime(analyzer,interview,reportService);
+  return new CodeDefenseRuntime(analyzer,stagedChangeAnalyzerFactory,interview,reportService);
  }
 }

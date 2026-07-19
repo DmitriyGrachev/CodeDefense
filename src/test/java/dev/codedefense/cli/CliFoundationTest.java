@@ -38,6 +38,8 @@ class CliFoundationTest {
         assertTrue(help.contains("start"));
         assertTrue(help.contains("sample"));
         assertTrue(help.contains("report"));
+        assertTrue(help.contains("prove"));
+        assertTrue(help.contains("passport"));
     }
 
     @Test
@@ -47,6 +49,8 @@ class CliFoundationTest {
         assertTrue(commandLine.getSubcommands().containsKey("start"));
         assertTrue(commandLine.getSubcommands().containsKey("sample"));
         assertTrue(commandLine.getSubcommands().containsKey("report"));
+        assertTrue(commandLine.getSubcommands().containsKey("prove"));
+        assertTrue(commandLine.getSubcommands().containsKey("passport"));
     }
 
     @Test
@@ -86,6 +90,28 @@ class CliFoundationTest {
         assertEquals(ExitCodes.SUCCESS, commandLine.execute("--help"));
         assertEquals(ExitCodes.SUCCESS, commandLine.execute("--version"));
         assertEquals(0, sampleCalls.get());
+    }
+
+    @Test
+    void rootHelpAndVersionDoNotConstructProveOrPassportWorkflows() {
+        AtomicInteger proveConstructions = new AtomicInteger();
+        AtomicInteger passportConstructions = new AtomicInteger();
+        ProveCommand prove = new ProveCommand(() -> {
+            proveConstructions.incrementAndGet();
+            return (path, dryRun, yes, out, err) -> ExitCodes.SUCCESS;
+        });
+        PassportCommand passport = new PassportCommand(() -> {
+            passportConstructions.incrementAndGet();
+            throw new AssertionError("verification must stay lazy");
+        });
+        CommandLine commandLine = CodeDefenseApplication.createCommandLine(
+                new StartCommand((path, dryRun, yes, out, err) -> ExitCodes.SUCCESS),
+                new SampleCommand((dryRun, yes, out, err) -> ExitCodes.SUCCESS), new ReportCommand(), prove, passport);
+
+        assertEquals(ExitCodes.SUCCESS, commandLine.execute("--help"));
+        assertEquals(ExitCodes.SUCCESS, commandLine.execute("--version"));
+        assertEquals(0, proveConstructions.get());
+        assertEquals(0, passportConstructions.get());
     }
 
     @Test

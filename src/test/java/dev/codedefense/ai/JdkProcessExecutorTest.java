@@ -87,6 +87,20 @@ class JdkProcessExecutorTest {
     }
 
     @Test
+    void returnsDefensiveBoundedStdoutBytesAfterDrainingTheChildStream() {
+        ProcessResult result = new JdkProcessExecutor().execute(
+                spec("echo", "x".repeat(1024 * 1024), 3, 1024, Duration.ofSeconds(3), Map.of()));
+
+        byte[] first = result.stdoutBytes();
+        first[0] = 'z';
+
+        assertEquals("xxx", result.stdout());
+        assertEquals("xxx", new String(result.stdoutBytes(), java.nio.charset.StandardCharsets.UTF_8));
+        assertTrue(result.stdoutTruncated());
+        assertFalse(result.timedOut());
+    }
+
+    @Test
     void marksStderrAsTruncatedWhenItsCaptureLimitIsExceeded() {
         ProcessResult result = new JdkProcessExecutor().execute(
                 spec("stderr", "", 1024, 3, Duration.ofSeconds(2), Map.of(), "5"));

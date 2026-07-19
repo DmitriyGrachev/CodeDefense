@@ -1712,6 +1712,7 @@ LocalDirectoryProjectSource
 GitHubPublicProjectSource
 ZipProjectSource
 GitWorkingTreeDiffSource
+GitStagedIndexChangeSource
 ```
 
 ## 16.2 Additional AI runtimes

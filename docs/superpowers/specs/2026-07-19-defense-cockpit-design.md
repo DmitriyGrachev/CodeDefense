@@ -1,6 +1,6 @@
 # CodeDefense Defense Cockpit Design
 
-**Status:** approved in conversation; written specification pending user review
+**Status:** approved in conversation on 2026-07-19
 **Scope:** Iterations 8.13–8.16
 **Product surface:** Java 21 core CLI and IntelliJ IDEA plugin
 **Dependency:** Iterations 8.11 and the existing source-free Passport contracts
@@ -77,7 +77,7 @@ The strict JSON response is versioned, deterministic, bounded to 256 KiB, and co
 - current full diff fingerprint when available; the UI derives the 12-character display form locally;
 - matching attempt number when current;
 - staged file/addition/deletion counts;
-- at most 30 normalized relative staged paths needed to explain expiration.
+- at most 30 normalized relative staged paths only for `EXPIRED`, where they are needed to explain the stale proof; other states return no paths.
 
 It contains no source, hunks, answers, questions, feedback, model output, absolute paths, environment values, or raw errors.
 
@@ -167,7 +167,7 @@ Add a local-only command equivalent to:
 codedefense passport insights [PATH] --format json --limit 20
 ```
 
-It reads at most the most recent 20 complete attempts whose validated repository-root identity matches the current repository. It includes staged, commit, and range defenses because the radar describes repository learning rather than gate eligibility.
+It reads at most the most recent 20 complete attempts whose validated repository-root identity matches the current repository. Repository filtering occurs before the limit, so newer receipts from unrelated repositories cannot hide local history. It includes staged, commit, and range defenses because the radar describes repository learning rather than gate eligibility.
 
 The core calculates:
 
@@ -207,7 +207,7 @@ When and only when the fresh gate state is `CURRENT`, expose an unchecked per-co
 Attach CodeDefense Passport fingerprint
 ```
 
-With explicit selection, append one Git trailer containing the full lowercase SHA-256 diff fingerprint:
+The commit UI performs an early bounded gate refresh to enable the option. The final pre-commit callback remains authoritative. With explicit selection, append one Git trailer containing the full lowercase SHA-256 diff fingerprint:
 
 ```text
 CodeDefense-Passport: sha256:<64 lowercase hex characters>
@@ -223,6 +223,8 @@ Trailer rules:
 - if an existing trailer differs from the fresh current fingerprint, warn and require the user to remove or explicitly replace it;
 - never add a trailer for `UNDEFENDED`, `EXPIRED`, `UNAVAILABLE`, `NO_STAGED_CHANGE`, or unsupported commit mode;
 - never persist the checkbox selection as a default.
+
+When trailer attachment is selected, perform a second immediate staged gate check before mutating the commit message. Both fresh checks must report the same complete current identity. A mismatch cancels the commit and appends nothing. External mutation after the final callback remains an unavoidable Git/IDE handoff race and CodeDefense does not claim atomic signing.
 
 The final iteration also polishes the Cockpit layout: live badge at the top, staged summary and actions below it, question/evidence area in the center, and the learning radar below the session output. Narrow Tool Windows retain access to all actions.
 
@@ -259,6 +261,7 @@ git add
 - Preview and confirmation remain mandatory before disclosure.
 - The plugin does not run Git directly; all Git identity logic remains in the bundled CLI.
 - Child commands are token lists, never shell strings.
+- Background CLI children receive only an explicit minimal cross-platform environment allowlist required to resolve Git; arbitrary environment secrets are not inherited.
 - Every child process has a positive timeout, bounded capture, concurrent draining, and process-tree cleanup.
 - JSON readers use strict duplicate detection, fail on trailing tokens, validate exact fields, and enforce byte limits.
 - Repository paths are normalized, contained, and symlink-safe at every filesystem boundary.

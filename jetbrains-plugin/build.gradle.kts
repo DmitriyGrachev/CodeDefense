@@ -40,7 +40,7 @@ intellijPlatform {
         version = project.version.toString()
         ideaVersion {
             sinceBuild = "261"
-            untilBuild = "261.*"
+            untilBuild = "262.*"
         }
         vendor {
             name = "CodeDefense"

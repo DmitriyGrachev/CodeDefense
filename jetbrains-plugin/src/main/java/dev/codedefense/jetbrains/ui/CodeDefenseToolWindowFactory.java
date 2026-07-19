@@ -1,8 +1,6 @@
 package dev.codedefense.jetbrains.ui;
 
-import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
@@ -27,9 +25,8 @@ public final class CodeDefenseToolWindowFactory implements ToolWindowFactory, Du
     public void createToolWindowContent(Project project, ToolWindow toolWindow) {
         String basePath = project.getBasePath();
         if (basePath == null) return;
-        var descriptor = PluginManagerCore.getPlugin(PluginId.getId("dev.codedefense.jetbrains"));
-        if (descriptor == null) return;
-        Path bundledJar = descriptor.getPluginPath().resolve("cli").resolve("codedefense.jar");
+        Path bundledJar = bundledCliPath();
+        if (bundledJar == null) return;
         CodeDefenseSettings settings = CodeDefenseSettings.getInstance();
         Path cliJar = settings.resolveCliJar(bundledJar);
         CodeDefenseLauncher launcher = CodeDefenseLauncher.production(cliJar);
@@ -62,6 +59,28 @@ public final class CodeDefenseToolWindowFactory implements ToolWindowFactory, Du
         toolWindow.getContentManager().addContent(
                 ContentFactory.getInstance().createContent(view.component(), "", false));
         controller.refresh();
+    }
+
+    private static Path bundledCliPath() {
+        try {
+            var codeSource = CodeDefenseToolWindowFactory.class.getProtectionDomain().getCodeSource();
+            return codeSource == null ? null
+                    : bundledCliPath(Path.of(codeSource.getLocation().toURI()));
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    static Path bundledCliPath(Path codeLocation) {
+        Path normalized = codeLocation.toAbsolutePath().normalize();
+        Path libDirectory = normalized.getParent();
+        if (libDirectory == null || libDirectory.getFileName() == null
+                || !libDirectory.getFileName().toString().equalsIgnoreCase("lib")) {
+            return null;
+        }
+        Path pluginRoot = libDirectory.getParent();
+        return pluginRoot == null ? null
+                : pluginRoot.resolve("cli").resolve("codedefense.jar");
     }
 
     private CodeDefenseToolWindowController.Session adapt(BridgeProcess process) {

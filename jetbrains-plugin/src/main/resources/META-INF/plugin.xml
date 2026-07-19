@@ -6,7 +6,7 @@
         Run a bounded CodeDefense change defense and inspect local Change Passport status inside IntelliJ IDEA.
     ]]></description>
     <depends>com.intellij.modules.platform</depends>
-    <idea-version since-build="261" until-build="261.*"/>
+    <idea-version since-build="261" until-build="262.*"/>
     <resource-bundle>messages.CodeDefenseBundle</resource-bundle>
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow id="CodeDefense"

@@ -11,13 +11,13 @@ import org.junit.jupiter.api.Test;
 
 class PluginMetadataTest {
     @Test
-    void targetsOnlyIntellijIdeaBuild261AndRegistersLazyProjectToolWindow() throws IOException {
+    void targetsIntellijIdeaBuilds261And262AndRegistersLazyProjectToolWindow() throws IOException {
         String xml = resource("META-INF/plugin.xml");
 
         assertTrue(xml.contains("<id>dev.codedefense.jetbrains</id>"));
         assertTrue(xml.contains("<depends>com.intellij.modules.platform</depends>"));
         assertTrue(xml.contains("since-build=\"261\""));
-        assertTrue(xml.contains("until-build=\"261.*\""));
+        assertTrue(xml.contains("until-build=\"262.*\""));
         assertTrue(xml.contains("factoryClass=\"dev.codedefense.jetbrains.ui.CodeDefenseToolWindowFactory\""));
         assertFalse(xml.contains("com.intellij.modules.java"));
         assertFalse(xml.contains("com.intellij.modules.vcs"));
@@ -31,11 +31,22 @@ class PluginMetadataTest {
 
         assertTrue(build.contains("version \"2.18.1\""));
         assertTrue(build.contains("intellijIdea(\"2026.1.4\")"));
+        assertTrue(build.contains("untilBuild = \"262.*\""));
         assertTrue(build.contains("JavaLanguageVersion.of(21)"));
         assertTrue(build.contains("into(\"${project.name}/cli\")"));
         assertTrue(build.contains("buildSearchableOptions = false"));
         assertFalse(build.contains("implementation(files(coreJar"));
         assertTrue(wrapper.contains("gradle-9.0.0-bin.zip"));
+    }
+
+    @Test
+    void locatesBundledCliWithoutInternalPluginManagerApi() throws IOException {
+        String factory = Files.readString(Path.of(
+                "src/main/java/dev/codedefense/jetbrains/ui/CodeDefenseToolWindowFactory.java"),
+                StandardCharsets.UTF_8);
+
+        assertFalse(factory.contains("PluginManagerCore"));
+        assertTrue(factory.contains("getProtectionDomain()"));
     }
 
     private String resource(String name) throws IOException {

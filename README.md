@@ -164,7 +164,7 @@ cd jetbrains-plugin
 
 The plugin ZIP is written beneath `jetbrains-plugin/build/distributions/` and contains the plugin JAR plus `cli/codedefense.jar`. Install it through **Settings → Plugins → Install Plugin from Disk**, then open **View → Tool Windows → CodeDefense**. The Tool Window supports staged, commit, and range selectors; the four closed defense focus values; dry preview; explicit source confirmation; one-question-at-a-time answer/skip controls; cancellation; source-free Passport status; and opening only the exact regular non-symlink Passport path returned by a successful core event.
 
-Plugin settings contain only the bundled/override CLI choice, an optional validated JAR path, the default selector, and the default focus. They never contain Codex credentials, prompts, source, questions, or answers. Iteration 8.11 targets IntelliJ IDEA build `261.*` on Windows; it does not claim support for other JetBrains products or operating systems.
+Plugin settings contain only the bundled/override CLI choice, an optional validated JAR path, the default selector, and the default focus. They never contain Codex credentials, prompts, source, questions, or answers. Iteration 8.11 targets IntelliJ IDEA builds `261.*` and `262.*` on Windows; it does not claim support for other JetBrains products or operating systems.
 
 ## Credits and opt-in live smoke
 

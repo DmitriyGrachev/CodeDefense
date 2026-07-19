@@ -7,6 +7,8 @@ import dev.codedefense.domain.StagedChange;
 import dev.codedefense.domain.StagedChangeIdentity;
 import dev.codedefense.domain.StagedChangeFile;
 import dev.codedefense.domain.StagedFileStatus;
+import dev.codedefense.domain.SourceFile;
+import dev.codedefense.scanner.FilePrioritizer;
 import dev.codedefense.scanner.ProjectFileFilter;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -23,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -35,12 +38,14 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
     private static final Duration TERMINATION_GRACE_PERIOD = Duration.ofSeconds(1);
     private static final int DEFAULT_MAXIMUM_HUNK_BYTES = 24 * 1024;
     private static final int DEFAULT_MAXIMUM_DIFF_BYTES = 120 * 1024;
+    private static final int MAXIMUM_HUNK_CAPTURES = 30;
     private static final String ZERO_OBJECT_ID = "0".repeat(40);
     private static final Pattern HUNK_HEADER = Pattern.compile(
             "@@ -(\\d+)(?:,(\\d+))? \\+(\\d+)(?:,(\\d+))? @@.*");
 
     private final ProcessExecutor processExecutor;
     private final ProjectFileFilter fileFilter;
+    private final FilePrioritizer filePrioritizer;
     private final int maximumHunkBytes;
     private final int maximumDiffBytes;
 
@@ -59,6 +64,7 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
             int maximumDiffBytes) {
         this.processExecutor = Objects.requireNonNull(processExecutor, "processExecutor");
         this.fileFilter = Objects.requireNonNull(fileFilter, "fileFilter");
+        this.filePrioritizer = new FilePrioritizer();
         if (maximumHunkBytes <= 0 || maximumDiffBytes <= 0) {
             throw new IllegalArgumentException("Git capture limits must be positive");
         }
@@ -75,14 +81,17 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
         Path root = capturedIndex.root();
         List<RawEntry> rawEntries = capturedIndex.rawEntries();
         Map<Path, LineCounts> lineCounts = parseNumstat(requiredBytes(run(root, maximumDiffBytes,
-                "diff", "--cached", "--no-ext-diff", "--no-textconv", "--numstat", "-z")));
+                "diff", "--cached", "--no-ext-diff", "--no-textconv", "--find-renames=100%",
+                "--numstat", "-z")));
 
         List<EntryWithFile> files = new ArrayList<>();
         for (RawEntry entry : rawEntries) {
             LineCounts counts = lineCounts.getOrDefault(entry.path(), LineCounts.ZERO);
             StagedChangeFile file;
             try {
-                file = new StagedChangeFile(entry.path(), entry.status(), counts.added(), counts.deleted());
+                Optional<Path> previousPath = entry.status() == StagedFileStatus.RENAMED
+                        ? Optional.of(entry.oldPath()) : Optional.empty();
+                file = new StagedChangeFile(entry.path(), previousPath, entry.status(), counts.added(), counts.deleted());
             } catch (IllegalArgumentException exception) {
                 throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
             }
@@ -102,10 +111,13 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                 addedLines,
                 deletedLines);
 
-        List<EntryWithFile> eligible = files.stream().filter(this::isEligible).toList();
+        List<EntryWithFile> eligible = prioritizedEligible(files);
         List<StagedHunk> hunks = new ArrayList<>();
         for (EntryWithFile value : eligible) {
-            hunks.addAll(readHunks(root, value.file()));
+            hunks.addAll(readHunks(root, value));
+        }
+        if (!capturedIndex.identity().equals(captureIndexAtRoot(root).identity())) {
+            throw new GitChangeException(GitChangeException.Kind.CHANGED_DURING_CAPTURE);
         }
         return new CapturedStagedChange(change, hunks);
     }
@@ -118,6 +130,10 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
     private CapturedIndex captureIndex(Path requestedPath) {
         Path requestedRoot = normalizeDirectory(requestedPath);
         Path root = resolveRepositoryRoot(requestedRoot);
+        return captureIndexAtRoot(root);
+    }
+
+    private CapturedIndex captureIndexAtRoot(Path root) {
         String baseCommit = requiredText(run(root, 256, "rev-parse", "--verify", "HEAD"));
         requireObjectId(baseCommit);
         List<RawEntry> rawEntries = parseRaw(requiredBytes(run(root, maximumDiffBytes,
@@ -138,6 +154,21 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                 sha256("codedefense-staged-change-v2\0" + baseCommit + "\0" + canonicalEntries),
                 rawEntries.stream().map(RawEntry::path).map(StagedChangeIdentity::pathHash).sorted().toList());
         return new CapturedIndex(root, rawEntries, identity);
+    }
+
+    private List<EntryWithFile> prioritizedEligible(List<EntryWithFile> files) {
+        Map<Path, EntryWithFile> byPath = new HashMap<>();
+        List<SourceFile> candidates = new ArrayList<>();
+        for (EntryWithFile value : files) {
+            if (isEligible(value)) {
+                byPath.put(value.file().path(), value);
+                candidates.add(new SourceFile(value.file().path()));
+            }
+        }
+        return filePrioritizer.prioritize(candidates).stream()
+                .limit(MAXIMUM_HUNK_CAPTURES)
+                .map(candidate -> byPath.get(candidate.relativePath()))
+                .toList();
     }
 
     private Path normalizeDirectory(Path requestedPath) {
@@ -210,14 +241,20 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
     }
 
     private static boolean isHunkCommand(String[] arguments) {
-        return arguments.length >= 2 && arguments[0].equals("diff") && arguments[1].equals("--cached")
-                && java.util.Arrays.asList(arguments).contains("--unified=3");
+        return java.util.Arrays.asList(arguments).contains("--unified=3");
     }
 
-    private List<StagedHunk> readHunks(Path root, StagedChangeFile file) {
+    private List<StagedHunk> readHunks(Path root, EntryWithFile value) {
+        StagedChangeFile file = value.file();
+        List<String> arguments = new ArrayList<>(List.of(
+                "--literal-pathspecs", "diff", "--cached", "--no-ext-diff", "--no-textconv",
+                "--find-renames=100%", "--unified=3", "--no-color", "--"));
+        if (file.status() == StagedFileStatus.RENAMED) {
+            arguments.add(portable(value.entry().oldPath()));
+        }
+        arguments.add(portable(file.path()));
         ProcessResult result = run(root, maximumHunkBytes,
-                "diff", "--cached", "--no-ext-diff", "--no-textconv", "--unified=3", "--no-color", "--",
-                portable(file.path()));
+                arguments.toArray(String[]::new));
         return parseHunks(file, decodeCommandText(result.stdoutBytes(), result.stdoutTruncated()), result.stdoutTruncated());
     }
 

@@ -4,7 +4,7 @@
 
 **Goal:** Add prove --staged to assess understanding of the exact Git index diff and persist a local, verifiable Markdown Change Passport.
 
-**Architecture:** A Git adapter captures HEAD plus the index tree and obtains staged/base blobs by Git object ID, never through the working tree. A dedicated staged-context builder applies the existing limits, redaction, line numbering, preview, confirmation, structured Codex analysis, and interview engine. A separate passport store persists Markdown plus a bounded metadata envelope needed to determine CURRENT or EXPIRED.
+**Architecture:** A Git adapter derives a read-only SHA-256 index identity from HEAD plus canonical raw staged entries, then captures bounded, parsed unified hunks without reading the working tree. Literal pathspecs, exact-rename options, a 30-file subprocess cap, and a final identity recapture keep the initial snapshot safe and internally consistent. A dedicated staged-context builder applies the existing limits, redaction, original line ranges, preview, confirmation, structured Codex analysis, and interview engine. A separate passport store persists Markdown plus a bounded metadata envelope needed to determine CURRENT or EXPIRED.
 
 **Tech Stack:** Java 21, Maven, Picocli, JUnit 5, Jackson, the existing bounded ProcessExecutor, and the local Git CLI. No new dependencies.
 
@@ -36,11 +36,12 @@
 - src/main/java/dev/codedefense/domain/ChangePassport.java — completed local assessment tied to a staged identity.
 - src/main/java/dev/codedefense/domain/PassportVerification.java — explicit verification result.
 - src/main/java/dev/codedefense/change/StagedChangeSource.java — port for capturing staged Git content.
-- src/main/java/dev/codedefense/change/CapturedStagedChange.java — immutable bounded transfer object from the Git adapter to the context builder; its toString hides contents.
-- src/main/java/dev/codedefense/change/IndexBlob.java — immutable bounded staged/base blob text; its toString hides contents.
+- src/main/java/dev/codedefense/change/CapturedStagedChange.java — immutable bounded hunk transfer object from the Git adapter to the context builder; its toString hides contents.
+- src/main/java/dev/codedefense/change/StagedHunk.java — parsed old/new ranges plus bounded unified hunk content; its toString hides contents.
+- src/main/java/dev/codedefense/domain/SourceLineRange.java — exact retained evidence provenance.
 - src/main/java/dev/codedefense/change/GitCliStagedChangeSource.java — bounded tokenized Git implementation.
 - src/main/java/dev/codedefense/change/GitChangeException.java — fixed safe Git/index errors.
-- src/main/java/dev/codedefense/change/StagedChangeContextBuilder.java — bounded/redacted ProjectSnapshot from index/base blobs.
+- src/main/java/dev/codedefense/change/StagedChangeContextBuilder.java — bounded/redacted ProjectSnapshot from staged/HEAD hunks.
 - src/main/java/dev/codedefense/change/StagedChangePreviewRenderer.java — staged identity and snapshot preview.
 - src/main/java/dev/codedefense/analysis/StagedChangeAnalyzer.java — staged-analysis port.
 - src/main/java/dev/codedefense/analysis/AiStagedChangeAnalyzer.java — structured Codex implementation.
@@ -66,7 +67,7 @@
 
 - src/main/java/dev/codedefense/application/CodeDefenseRuntime.java — expose StagedChangeAnalyzer.
 - src/main/java/dev/codedefense/application/CodeDefenseRuntimeFactory.java — construct it from the same lazy provider, mapper, and configuration.
-- src/main/java/dev/codedefense/ai/ProcessResult.java — retain a defensive copy of bounded stdout bytes for strict Git blob decoding while keeping toString content-free.
+- src/main/java/dev/codedefense/ai/ProcessResult.java — retain a defensive copy of bounded stdout bytes for strict Git output decoding while keeping toString content-free.
 - src/main/java/dev/codedefense/ai/JdkProcessExecutor.java — populate the already bounded stdout-byte capture without introducing an unbounded read.
 - src/main/java/dev/codedefense/CodeDefenseApplication.java — register prove and passport.
 - src/main/java/dev/codedefense/cli/ExitCodes.java — add GIT_EXECUTION_FAILED with value 10.
@@ -116,7 +117,7 @@ public record StagedChange(
         Path repositoryRoot,
         String repositoryIdentityHash,
         String baseCommit,
-        String indexTree,
+        String indexIdentity,
         String diffFingerprint,
         List<StagedChangeFile> files,
         int addedLines,
@@ -166,13 +167,13 @@ git add src/main/java/dev/codedefense/domain/StagedFileStatus.java src/main/java
 git commit -m "feat: model staged change passports"
 ~~~
 
-## Task 2: Capture exact index state and bounded Git blobs
+## Task 2: Capture a read-only index identity and bounded staged hunks
 
 **Files:**
 
 - Create: src/main/java/dev/codedefense/change/StagedChangeSource.java
 - Create: src/main/java/dev/codedefense/change/CapturedStagedChange.java
-- Create: src/main/java/dev/codedefense/change/IndexBlob.java
+- Create: src/main/java/dev/codedefense/change/StagedHunk.java
 - Create: src/main/java/dev/codedefense/change/GitCliStagedChangeSource.java
 - Create: src/main/java/dev/codedefense/change/GitChangeException.java
 - Test: src/test/java/dev/codedefense/change/GitCliStagedChangeSourceTest.java
@@ -185,23 +186,22 @@ public interface StagedChangeSource {
 }
 ~~~
 
-CapturedStagedChange and IndexBlob are public immutable transfer records because the application runner and context builder reside in a different package. They transfer bounded source text only to the context builder, copy all collections, and override toString to expose counts/paths but never contents.
+CapturedStagedChange and StagedHunk are public immutable transfer records because the application runner and context builder reside in a different package. They transfer bounded hunk text only to the context builder, copy all collections, and override toString to expose counts/paths/ranges but never contents.
 
 - [ ] **Step 1: Write failing command/parser tests with a hand-written ProcessExecutor fake.**
 
 ~~~java
 assertEquals(List.of("git", "-C", root.toString(), "rev-parse", "--show-toplevel"),
         executor.commands().getFirst());
-assertEquals(indexTree, captured.change().indexTree());
-     assertEquals(
-             sha256("codedefense-staged-change-v1\0" + baseCommit + "\0" + indexTree),
-             captured.change().diffFingerprint());
+assertTrue(captured.change().indexIdentity().matches("[0-9a-f]{64}"));
+assertFalse(executor.commands().stream().anyMatch(command -> command.contains("write-tree")));
+assertTrue(captured.hunks().stream().anyMatch(hunk -> hunk.unifiedContent().contains("changedLine")));
 assertFalse(executor.standardInputs().stream().anyMatch(value -> value.contains("source")));
 ~~~
 
-The fake supplies bounded results for rev-parse --show-toplevel, rev-parse --verify HEAD, write-tree, diff --cached --raw -z --no-abbrev --find-renames=100%, diff --cached --numstat -z --no-ext-diff, diff --cached --no-ext-diff --no-color --full-index --binary, and cat-file blob object-id. Assert tokenized commands, empty stdin, resolved-root working directory, no shell command, and no external diff/text-conversion configuration.
+The fake supplies bounded results for rev-parse --show-toplevel, rev-parse --verify HEAD, canonical raw and numstat diffs with --find-renames=100%, and per-file `--literal-pathspecs diff --cached --unified=3` calls. Assert tokenized commands, empty stdin, resolved-root working directory, no shell command, no write-tree/cat-file call, and no external diff/text-conversion configuration.
 
-Cover add/modify/delete/rename records; no repository; no HEAD; no staged difference; malformed NUL records; unsafe/control-character paths; nonzero Git exit; timeout; truncated output; unsupported/binary/symlink/submodule entries; and a staged blob deliberately different from a working-tree sentinel.
+Cover add/modify/delete/exact-rename records; literal pathspec magic names; no repository; no HEAD; no staged difference; index changes during capture; malformed NUL records; unsafe/control-character paths; nonzero Git exit; timeout; truncated output; unsupported/binary/symlink/submodule entries; a 30 hunk-process cap; and a staged hunk deliberately different from a working-tree sentinel.
 
 - [ ] **Step 2: Run the focused test.**
 
@@ -211,21 +211,21 @@ Expected before implementation: compilation failure for the Git source boundary.
 
 - [ ] **Step 3: Implement deterministic Git capture.**
 
-Resolve root first, then capture HEAD and write-tree. Reject an unborn repository, empty staged diff, malformed Git data, nonzero exit, timeout, or bounded-output truncation with fixed messages that contain no Git output.
+Resolve root first, then capture HEAD and canonical NUL-delimited raw staged entries. Reject an unborn repository, empty staged diff, malformed Git data, nonzero exit, timeout, or bounded-output truncation with fixed messages that contain no Git output.
 
 Use this fingerprint:
 
 ~~~java
-sha256("codedefense-staged-change-v1\0" + baseCommit + "\0" + indexTree)
+sha256("codedefense-staged-change-v2\0" + baseCommit + "\0" + canonicalRawEntries)
 ~~~
 
-It precisely identifies the index tree relative to its base without depending on diff display line endings. Retain a separate bounded canonical diff prefix for prompt context.
+Derive `indexIdentity` with a separate domain prefix from the same base commit and canonical raw entries. This is read-only and does not materialize a tree object. Retain bounded changed-file metadata for prompt context.
 
-Parse only NUL-delimited raw records. Read a selected staged blob and, when relevant, its HEAD blob by object ID. Never resolve a changed path against the working tree. Filter source eligibility through ProjectFileFilter; reject symlink, submodule, non-text, and invalid blobs rather than substituting worktree data.
+Parse only NUL-delimited raw/numstat records and strict unified hunk headers. Filter through ProjectFileFilter, deterministically prioritize with FilePrioritizer, and capture at most 30 eligible paths. Run every per-file patch with `--literal-pathspecs`, `--no-ext-diff`, `--no-textconv`, and `--find-renames=100%`. For exact renames preserve both paths and pass both literal pathspecs; pure rename-only changes contain no source hunk and are not defensible by themselves. Never resolve a changed path against the working tree. Recapture identity after numstat/hunks and abort safely if HEAD or index changed.
 
 - [ ] **Step 4: Preserve bounded byte correctness.**
 
-Extend ProcessResult with a defensive stdoutBytes accessor backed by a copied bounded byte array, and make JdkProcessExecutor return the exact bytes already retained by BoundedCapture. Keep ProcessResult.toString content-free. Add JdkProcessExecutorTest assertions that changing the returned byte array cannot change a later accessor result and that stdout truncation still drains the child stream. Decode Git blob prefixes with the same valid-UTF-8/incomplete-final-sequence/fallback policy as BoundedTextFileReader. Keep process diagnostics text-only and secret-safe.
+Use ProcessResult's defensive stdoutBytes accessor backed by a copied bounded byte array. Keep ProcessResult.toString content-free and continue draining after capture limits. Decode bounded Git hunk output with strict UTF-8, trimming only an incomplete trailing sequence when truncated and using deterministic fallback for genuinely malformed bytes. Keep process diagnostics text-only and secret-safe.
 
 - [ ] **Step 5: Re-run the focused test and commit.**
 
@@ -266,7 +266,7 @@ public final class StagedChangePreviewRenderer {
 
 ~~~java
 ProjectSnapshot snapshot = builder.build(capturedWithDifferentIndexAndWorktree());
-assertTrue(snapshot.promptContent().contains("INDEX_FILE: src/App.java"));
+assertTrue(snapshot.promptContent().contains("STAGED_HUNK: src/App.java"));
 assertFalse(snapshot.promptContent().contains("unstaged-working-tree-secret"));
 assertTrue(snapshot.promptContent().contains("[REDACTED]"));
 assertTrue(snapshot.promptBytes() <= config.maximumSnapshotBytes());
@@ -284,11 +284,11 @@ Expected before implementation: compilation failure for the context builder.
 
 Reuse ProjectFileFilter, FilePrioritizer, SecretRedactor, LineNumberFormatter, SnapshotBudget, and CodeDefenseConfig. Build a ProjectSnapshot named from the repository root and typed Staged Git change.
 
-The deterministic payload contains identity facts, changed statuses, bounded canonical diff, INDEX_FILE blocks, and only necessary HEAD_FILE blocks. Selected-file metadata contains current staged paths only, so existing evidence validation rejects evidence against deleted/base-only content. Add redaction counts only for included blocks and assert the final UTF-8 prompt size is within the configured limit.
+The deterministic payload contains identity facts, changed statuses, bounded metadata, STAGED_HUNK blocks, and HEAD_HUNK blocks for deletions. Preserve exact old/new retained ranges in SelectedFile metadata so evidence validation accepts only visible lines, including deleted HEAD evidence. Pure exact renames appear as old-path/new-path metadata but do not send unchanged whole-file source. Add redaction counts only for included blocks and assert the final UTF-8 prompt size is within the configured limit.
 
 - [ ] **Step 4: Implement preview rendering.**
 
-Print repository name, Mode: Staged change, shortened base commit, index tree, fingerprint, changed/added/deleted counts, Unstaged working-tree content ignored: yes, selected-file and byte limits, truncation/redaction counts, and selected paths. Do not print raw diff, blobs, Git output, or absolute paths.
+Print repository name, Mode: Staged change, shortened base commit, index identity, fingerprint, changed/added/deleted counts, Unstaged working-tree content ignored: yes, selected-file and byte limits, truncation/redaction counts, and selected paths. Do not print raw diff, hunks, Git output, or absolute paths.
 
 - [ ] **Step 5: Re-run focused tests and commit.**
 
@@ -414,7 +414,7 @@ assertEquals(PassportStatus.EXPIRED, verifier.verify(root).orElseThrow().status(
 
 Cover identity, Java-owned category/overall scores/readiness, changed paths/statuses, privacy/non-authority wording, and correct CURRENT/pre-save EXPIRED behavior. Assert exclusion of raw diff, blobs, prompt content, expected key points, evidence reasons, raw model JSON, full answers, absolute root, and authorship claims.
 
-Test strict UTF-8, bounded pointers/files, atomic-move fallback, collision naming, malformed metadata, traversal/symlink rejection, and cleanup. Persist a fixed bounded ASCII metadata comment with only version, root hash, base commit, index tree, diff fingerprint, sorted changed-path hashes, and timestamp; parse only this grammar.
+Test strict UTF-8, bounded pointers/files, atomic-move fallback, collision naming, malformed metadata, traversal/symlink rejection, and cleanup. Persist a fixed bounded ASCII metadata comment with only version, root hash, base commit, index identity, diff fingerprint, sorted changed-path hashes, and timestamp; parse only this grammar. Legacy `tree=` metadata remains readable but always verifies as EXPIRED.
 
 - [ ] **Step 2: Run the focused passport test group.**
 
@@ -424,7 +424,7 @@ Expected before implementation: compilation failure for passport types.
 
 - [ ] **Step 3: Implement creation-time and verification semantics.**
 
-ChangePassportService recaptures the index immediately before save. It stores CURRENT only when repository identity, base, index tree, fingerprint, and changed-path hashes equal the pre-interview capture; otherwise stores EXPIRED. That closes an index-change race during the interview.
+ChangePassportService recaptures the index immediately before save. It stores CURRENT only when repository identity, base, index identity, fingerprint, and changed-path hashes equal the pre-interview capture; otherwise stores EXPIRED. Initial Git capture separately recaptures identity after reading numstat/hunks and aborts if the snapshot was internally raced.
 
 VerifyLatestChangePassportUseCase recaptures and compares the latest stored identity. Any mismatch, including a different repository, returns EXPIRED. It never mutates the original immutable Markdown artifact; passport --verify reports compatibility at verification time.
 
@@ -575,6 +575,6 @@ Stage only files changed by this task. Do not stage acceptance logs, temporary G
 
 ## Plan self-review
 
-- [x] **Spec coverage:** This plan covers exact index identity, HEAD/index blobs, bounded/redacted staged context, three typed questions, existing local scoring, Markdown-only persistence, current/expired verification, fixed NOT_REQUESTED session status, CLI commands, race-safe pre-save recapture, tests, and documentation.
+- [x] **Spec coverage:** This plan covers read-only raw-entry identity, literal bounded staged/HEAD hunks, exact rename metadata, atomic initial capture, bounded/redacted context, three typed questions, existing local scoring, Markdown-only persistence, current/expired verification, fixed NOT_REQUESTED session status, CLI commands, race-safe pre-save recapture, tests, and documentation.
 - [x] **Scope:** It excludes app-server/session matching, HTML, JSON, Skill, browser, GitHub, PR, CI, signing, cloud storage, dashboards, and Iteration 9 work.
 - [x] **Consistency:** Every consumer uses an interface introduced by an earlier task; project-mode analysis and reporting remain unchanged.

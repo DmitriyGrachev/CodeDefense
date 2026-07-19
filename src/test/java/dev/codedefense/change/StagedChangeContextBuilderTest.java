@@ -15,6 +15,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class StagedChangeContextBuilderTest {
@@ -114,6 +115,25 @@ class StagedChangeContextBuilderTest {
         assertTrue(text.toString().contains("Index identity:"));
         assertFalse(text.toString().contains("class App"));
         assertFalse(text.toString().contains(ROOT.toString()));
+    }
+
+    @Test
+    void rendersExactRenameTransitionAsMetadataWithoutWholeFileContent() {
+        StagedChangeFile renamed = new StagedChangeFile(Path.of("src/NewName.java"),
+                Optional.of(Path.of("src/OldName.java")), StagedFileStatus.RENAMED, 0, 0);
+        StagedHunk modified = hunk("src/App.java", StagedFileStatus.MODIFIED, 1, 1, 1, 1,
+                "-oldValue();\n+newValue();");
+        List<StagedChangeFile> files = List.of(modified.file(), renamed);
+        StagedChange change = new StagedChange(ROOT, "a".repeat(64), "b".repeat(40), "c".repeat(64),
+                "d".repeat(64), files, 1, 1);
+
+        ProjectSnapshot snapshot = builder(10_000, 2_000)
+                .build(new CapturedStagedChange(change, List.of(modified)));
+
+        assertTrue(snapshot.promptContent().contains("path: src/NewName.java"));
+        assertTrue(snapshot.promptContent().contains("previousPath: src/OldName.java"));
+        assertFalse(snapshot.promptContent().contains("INDEX_FILE: src/NewName.java"));
+        assertFalse(snapshot.promptContent().contains("HEAD_FILE: src/OldName.java"));
     }
 
     private static StagedChangeContextBuilder builder(int snapshotBytes, int blockBytes) {

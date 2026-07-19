@@ -14,11 +14,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 class GitCliStagedChangeSourceTest {
@@ -59,8 +62,9 @@ class GitCliStagedChangeSourceTest {
         assertTrue(executor.specifications().stream().filter(spec -> spec.command().contains("diff"))
                 .allMatch(spec -> spec.command().contains("--no-ext-diff") && spec.command().contains("--no-textconv")));
         assertTrue(executor.specifications().stream().anyMatch(spec -> spec.command().equals(List.of(
-                "git", "-C", root.toString(), "diff", "--cached", "--no-ext-diff", "--no-textconv",
-                "--unified=3", "--no-color", "--", "src/LargeService.java"))));
+                "git", "-C", root.toString(), "--literal-pathspecs", "diff", "--cached", "--no-ext-diff",
+                "--no-textconv", "--find-renames=100%", "--unified=3", "--no-color", "--",
+                "src/LargeService.java"))));
     }
 
     @Test
@@ -89,6 +93,115 @@ class GitCliStagedChangeSourceTest {
         assertEquals(2, deleted.oldLineCount());
         assertEquals(0, deleted.newLineCount());
         assertTrue(deleted.unifiedContent().contains("removedService();"));
+    }
+
+    @Test
+    void passesEveryRepositoryPathAsALiteralPathspec() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("literal-pathspec"));
+        FakeProcessExecutor executor = successfulExecutor(root);
+
+        new GitCliStagedChangeSource(executor).capture(root);
+
+        assertTrue(executor.specifications().stream()
+                .filter(spec -> spec.command().contains("--unified=3"))
+                .allMatch(spec -> spec.command().equals(List.of(
+                        "git", "-C", root.toString(), "--literal-pathspecs", "diff", "--cached",
+                        "--no-ext-diff", "--no-textconv", "--find-renames=100%", "--unified=3",
+                        "--no-color", "--", spec.command().getLast()))));
+    }
+
+    @Test
+    void rejectsAStagedChangeThatChangesDuringInitialCapture() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("changing-index"));
+        FakeProcessExecutor executor = successfulExecutor(root);
+        String original = rawOutput("src/LargeService.java", NEW);
+        String changed = rawOutput("src/LargeService.java", "e".repeat(40));
+        executor.queue(rawDiffKey(), result(original, false), result(changed, false));
+
+        GitChangeException exception = assertThrows(GitChangeException.class,
+                () -> new GitCliStagedChangeSource(executor).capture(root));
+
+        assertEquals("Staged change changed during capture; retry.", exception.getMessage());
+        assertFalse(exception.getMessage().contains(NEW));
+        assertFalse(exception.getMessage().contains("e".repeat(40)));
+    }
+
+    @Test
+    void launchesAtMostThirtyDeterministicallyPrioritizedHunkCommands() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("bounded-processes"));
+        FakeProcessExecutor executor = successfulExecutor(root);
+        StringBuilder raw = new StringBuilder();
+        StringBuilder numstat = new StringBuilder();
+        for (int index = 0; index < 31; index++) {
+            String path = "src/File%02d.java".formatted(index);
+            raw.append(":000000 100644 ").append(zeros()).append(' ').append(NEW)
+                    .append(" A\0").append(path).append('\0');
+            numstat.append("1\t0\t").append(path).append('\0');
+            if (index < 30) {
+                executor.responses.put(hunkDiffKey(path), result("@@ -0,0 +1,1 @@\n+class File" + index + " {}\n", false));
+            }
+        }
+        executor.responses.put(rawDiffKey(), result(raw.toString(), false));
+        executor.responses.put(numstatDiffKey(), result(numstat.toString(), false));
+
+        CapturedStagedChange captured = new GitCliStagedChangeSource(executor).capture(root);
+
+        assertEquals(30, captured.hunks().size());
+        assertEquals(30, executor.specifications().stream()
+                .filter(spec -> spec.command().contains("--unified=3")).count());
+        assertFalse(captured.hunks().stream().anyMatch(hunk -> hunk.file().path().endsWith("File30.java")));
+        assertEquals(31, captured.change().files().size());
+    }
+
+    @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
+    void treatsGitMagicFileNamesLiterallyAndNeverCapturesExcludedSentinelContent() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("git-magic"));
+        FakeProcessExecutor executor = successfulExecutor(root);
+        List<String> literalNames = List.of("*.java", ":(top)node_modules/Secret.java", ":(glob)**/*.java");
+        String excluded = "node_modules/Secret.java";
+        StringBuilder raw = new StringBuilder();
+        StringBuilder numstat = new StringBuilder();
+        for (String path : java.util.stream.Stream.concat(literalNames.stream(), java.util.stream.Stream.of(excluded)).toList()) {
+            raw.append(":000000 100644 ").append(zeros()).append(' ').append(NEW)
+                    .append(" A\0").append(path).append('\0');
+            numstat.append("1\t0\t").append(path).append('\0');
+        }
+        for (String path : literalNames) {
+            executor.responses.put(hunkDiffKey(path), result("@@ -0,0 +1,1 @@\n+literal " + path + "\n", false));
+            executor.responses.put(activePathspecHunkDiffKey(path),
+                    result("@@ -0,0 +1,1 @@\n+EXCLUDED_SENTINEL\n", false));
+        }
+        executor.responses.put(rawDiffKey(), result(raw.toString(), false));
+        executor.responses.put(numstatDiffKey(), result(numstat.toString(), false));
+
+        CapturedStagedChange captured = new GitCliStagedChangeSource(executor).capture(root);
+
+        assertEquals(literalNames.stream().sorted().toList(),
+                captured.hunks().stream().map(hunk -> hunk.file().path().toString()).sorted().toList());
+        assertFalse(captured.hunks().stream().anyMatch(hunk -> hunk.unifiedContent().contains("EXCLUDED_SENTINEL")));
+        assertTrue(executor.specifications().stream().noneMatch(spec -> spec.command().getLast().equals(excluded)));
+    }
+
+    @Test
+    void preservesBothExactRenamePathsWithoutCapturingTheWholeDestinationFile() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("rename"));
+        FakeProcessExecutor executor = successfulExecutor(root);
+        String oldPath = "src/OldName.java";
+        String newPath = "src/NewName.java";
+        executor.responses.put(rawDiffKey(), result(
+                ":100644 100644 " + OLD + " " + OLD + " R100\0" + oldPath + "\0" + newPath + "\0", false));
+        executor.responses.put(numstatDiffKey(), result("0\t0\t\0" + oldPath + "\0" + newPath + "\0", false));
+        executor.responses.put(renameHunkDiffKey(oldPath, newPath), result("", false));
+
+        CapturedStagedChange captured = new GitCliStagedChangeSource(executor).capture(root);
+
+        assertEquals(oldPath, captured.change().files().getFirst().previousPath().orElseThrow().toString().replace('\\', '/'));
+        assertEquals(newPath, captured.change().files().getFirst().path().toString().replace('\\', '/'));
+        assertTrue(captured.hunks().isEmpty());
+        assertTrue(executor.specifications().stream().anyMatch(spec -> spec.command().equals(List.of(
+                "git", "-C", root.toString(), "--literal-pathspecs", "diff", "--cached", "--no-ext-diff",
+                "--no-textconv", "--find-renames=100%", "--unified=3", "--no-color", "--", oldPath, newPath))));
     }
 
     @Test
@@ -191,19 +304,36 @@ class GitCliStagedChangeSourceTest {
     }
 
     private static String numstatDiffKey() {
-        return commandKey("diff", "--cached", "--no-ext-diff", "--no-textconv", "--numstat", "-z");
+        return commandKey("diff", "--cached", "--no-ext-diff", "--no-textconv", "--find-renames=100%",
+                "--numstat", "-z");
     }
 
     private static String hunkDiffKey(String path) {
-        return commandKey("diff", "--cached", "--no-ext-diff", "--no-textconv", "--unified=3", "--no-color", "--", path);
+        return commandKey("--literal-pathspecs", "diff", "--cached", "--no-ext-diff", "--no-textconv",
+                "--find-renames=100%", "--unified=3", "--no-color", "--", path);
+    }
+
+    private static String renameHunkDiffKey(String oldPath, String newPath) {
+        return commandKey("--literal-pathspecs", "diff", "--cached", "--no-ext-diff", "--no-textconv",
+                "--find-renames=100%", "--unified=3", "--no-color", "--", oldPath, newPath);
+    }
+
+    private static String activePathspecHunkDiffKey(String path) {
+        return commandKey("diff", "--cached", "--no-ext-diff", "--no-textconv", "--unified=3", "--no-color",
+                "--", path);
     }
 
     private static String zeros() {
         return "0".repeat(40);
     }
 
+    private static String rawOutput(String path, String objectId) {
+        return ":100644 100644 " + OLD + " " + objectId + " M\0" + path + "\0";
+    }
+
     private static final class FakeProcessExecutor implements ProcessExecutor {
         private final Map<String, ProcessResult> responses = new HashMap<>();
+        private final Map<String, ArrayDeque<ProcessResult>> queuedResponses = new HashMap<>();
         private final List<ProcessSpec> specifications = new ArrayList<>();
 
         @Override
@@ -212,7 +342,16 @@ class GitCliStagedChangeSourceTest {
             List<String> command = specification.command();
             int gitIndex = command.indexOf("git");
             int operation = gitIndex + 3;
-            return responses.getOrDefault(commandKey(command.subList(operation, command.size()).toArray(String[]::new)), failed());
+            String key = commandKey(command.subList(operation, command.size()).toArray(String[]::new));
+            ArrayDeque<ProcessResult> queued = queuedResponses.get(key);
+            if (queued != null && !queued.isEmpty()) {
+                return queued.removeFirst();
+            }
+            return responses.getOrDefault(key, failed());
+        }
+
+        private void queue(String key, ProcessResult... results) {
+            queuedResponses.put(key, new ArrayDeque<>(List.of(results)));
         }
 
         private List<ProcessSpec> specifications() {

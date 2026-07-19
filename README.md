@@ -93,6 +93,8 @@ The staged defense asks exactly three categories of question: **Decision**, **Co
 
 `passport --verify .` is read-only: it does not modify the working tree, Git index, passport artifact, or latest pointer. It derives a deterministic index identity from the base commit and raw staged-index entries without materializing a Git tree object. It reports `CURRENT` when the saved passport matches that identity and `EXPIRED` when it does not. If the staged index changes during the interview, the pre-save recapture stores an `EXPIRED` artifact.
 
+Staged source context is built from bounded unified hunks for at most 30 deterministically prioritized supported files. Repository paths are passed to Git as literal pathspecs, and HEAD/index identity is checked again after initial capture; if it changed, CodeDefense aborts and asks you to retry. Exact renames retain both old and new paths. A pure rename with no changed source lines is intentionally not enough to start a defense, and unchanged whole-file content is not sent as an artificial addition.
+
 Passports and proof output exclude staged source, diffs, blobs, answers, raw model JSON, expected key points, and evidence reasons. They are educational only and are never approval to merge or deploy. This mode does not add an application server or session matching, HTML or JSON reports, a Skill, browser integration, GitHub/PR/CI/signing/cloud/dashboard integration.
 
 ## Privacy model

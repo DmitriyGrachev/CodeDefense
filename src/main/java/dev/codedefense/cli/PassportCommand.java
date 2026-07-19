@@ -80,7 +80,7 @@ public final class PassportCommand implements java.util.concurrent.Callable<Inte
                 commandSpec.commandLine().getErr().println("No eligible staged source files were found.");
                 yield ExitCodes.NO_SUPPORTED_SOURCE_FILES;
             }
-            case NO_HEAD, EXECUTION_FAILED, MALFORMED_DATA -> {
+            case NO_HEAD, CHANGED_DURING_CAPTURE, EXECUTION_FAILED, MALFORMED_DATA -> {
                 commandSpec.commandLine().getErr().println("Git could not safely capture the staged change.");
                 yield ExitCodes.GIT_EXECUTION_FAILED;
             }

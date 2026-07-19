@@ -2,7 +2,14 @@ package dev.codedefense.change;
 
 /** A fixed, content-free failure from the staged Git boundary. */
 public final class GitChangeException extends RuntimeException {
-    public enum Kind { INVALID_REPOSITORY, NO_HEAD, NO_STAGED_CHANGE, EXECUTION_FAILED, MALFORMED_DATA }
+    public enum Kind {
+        INVALID_REPOSITORY,
+        NO_HEAD,
+        NO_STAGED_CHANGE,
+        CHANGED_DURING_CAPTURE,
+        EXECUTION_FAILED,
+        MALFORMED_DATA
+    }
 
     private final Kind kind;
 
@@ -20,6 +27,7 @@ public final class GitChangeException extends RuntimeException {
             case INVALID_REPOSITORY -> "The supplied path is not a readable Git repository.";
             case NO_HEAD -> "The Git repository has no committed HEAD.";
             case NO_STAGED_CHANGE -> "No staged Git changes were found.";
+            case CHANGED_DURING_CAPTURE -> "Staged change changed during capture; retry.";
             case EXECUTION_FAILED -> "Git could not safely capture the staged change.";
             case MALFORMED_DATA -> "Git returned invalid staged change data.";
         };

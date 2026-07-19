@@ -15,6 +15,7 @@ import dev.codedefense.domain.Verdict;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 class MarkdownChangePassportRendererTest {
@@ -87,6 +88,23 @@ class MarkdownChangePassportRendererTest {
         assertTrue(markdown.contains("- Local final score: 61/100"));
         assertFalse(markdown.contains("private-answer"));
         assertFalse(markdown.contains("private-follow-up-answer"));
+    }
+
+    @Test
+    void rendersBothPathsForAnExactRename() {
+        ChangePassport original = PassportTestFixtures.passport(PassportStatus.CURRENT);
+        var renamed = new dev.codedefense.domain.StagedChangeFile(Path.of("src/NewName.java"),
+                Optional.of(Path.of("src/OldName.java")), dev.codedefense.domain.StagedFileStatus.RENAMED, 0, 0);
+        var change = new dev.codedefense.domain.StagedChange(original.change().repositoryRoot(),
+                original.change().repositoryIdentityHash(), original.change().baseCommit(),
+                original.change().indexIdentity(), original.change().diffFingerprint(), List.of(renamed), 0, 0);
+        ChangePassport passport = new ChangePassport(change, original.analysis(), original.session(),
+                original.createdAt(), original.model(), original.statusAtCreation());
+
+        String markdown = new MarkdownChangePassportRenderer().render(passport);
+
+        assertTrue(markdown.contains("src/OldName\\.java → src/NewName\\.java"));
+        assertFalse(markdown.contains("private-staged-source"));
     }
 
 }

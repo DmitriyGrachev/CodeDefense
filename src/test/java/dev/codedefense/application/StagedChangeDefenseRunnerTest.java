@@ -123,6 +123,24 @@ class StagedChangeDefenseRunnerTest {
     }
 
     @Test
+    void tellsTheUserToRetryWhenTheStagedChangeMovesDuringCapture() {
+        ByteArrayOutputStream errors = new ByteArrayOutputStream();
+        DefaultStagedChangeDefenseRunner runner = new DefaultStagedChangeDefenseRunner(
+                path -> { throw new dev.codedefense.change.GitChangeException(
+                        dev.codedefense.change.GitChangeException.Kind.CHANGED_DURING_CAPTURE); },
+                new StagedChangeContextBuilder(), new StagedChangePreviewRenderer(),
+                () -> { throw new AssertionError("confirmation must stay lazy"); },
+                out -> { throw new AssertionError("runtime must stay lazy"); },
+                () -> { throw new AssertionError("passport must stay lazy"); });
+
+        assertEquals(ExitCodes.GIT_EXECUTION_FAILED, runner.run(Path.of("."), false, true,
+                new PrintWriter(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8),
+                new PrintWriter(errors, true, StandardCharsets.UTF_8)));
+        assertEquals("Staged change changed during capture; retry." + System.lineSeparator(),
+                errors.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
     void noEligibleContextDoesNotConstructConfirmation() {
         AtomicInteger confirmationConstructions = new AtomicInteger();
         DefaultStagedChangeDefenseRunner runner = new DefaultStagedChangeDefenseRunner(

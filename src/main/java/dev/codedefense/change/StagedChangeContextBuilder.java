@@ -302,7 +302,10 @@ public final class StagedChangeContextBuilder {
     private String canonicalDiffMetadata(List<StagedChangeFile> files) {
         StringBuilder metadata = new StringBuilder();
         files.stream().sorted(Comparator.comparing(file -> portable(file.path()))).forEach(file -> {
-            metadata.append("diff --staged ").append(portable(file.path())).append('\n');
+            metadata.append("change:\n");
+            metadata.append("path: ").append(portable(file.path())).append('\n');
+            file.previousPath().ifPresent(previous -> metadata.append("previousPath: ")
+                    .append(portable(previous)).append('\n'));
             metadata.append("status: ").append(file.status()).append('\n');
             metadata.append("addedLines: ").append(file.addedLines()).append('\n');
             metadata.append("deletedLines: ").append(file.deletedLines()).append('\n');

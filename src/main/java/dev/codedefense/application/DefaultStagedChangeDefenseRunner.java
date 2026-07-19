@@ -138,6 +138,10 @@ public final class DefaultStagedChangeDefenseRunner implements StagedChangeDefen
                 err.println("No eligible staged source files were found.");
                 yield ExitCodes.NO_SUPPORTED_SOURCE_FILES;
             }
+            case CHANGED_DURING_CAPTURE -> {
+                err.println("Staged change changed during capture; retry.");
+                yield ExitCodes.GIT_EXECUTION_FAILED;
+            }
             case NO_HEAD, EXECUTION_FAILED, MALFORMED_DATA -> {
                 err.println("Git could not safely capture the staged change.");
                 yield ExitCodes.GIT_EXECUTION_FAILED;

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class StagedChangeTest {
@@ -45,6 +46,20 @@ class StagedChangeTest {
         assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(Path.of("src/../App.java"), StagedFileStatus.ADDED, 1, 0));
         assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(Path.of("src", "bad\u0000name"), StagedFileStatus.ADDED, 1, 0));
         assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(Path.of("src/App.java"), StagedFileStatus.ADDED, -1, 0));
+    }
+
+    @Test
+    void requiresAUniqueSafePreviousPathOnlyForRenames() {
+        StagedChangeFile renamed = new StagedChangeFile(Path.of("src/New.java"),
+                Optional.of(Path.of("src/Old.java")), StagedFileStatus.RENAMED, 0, 0);
+
+        assertEquals(Path.of("src/Old.java"), renamed.previousPath().orElseThrow());
+        assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(Path.of("src/New.java"),
+                Optional.empty(), StagedFileStatus.RENAMED, 0, 0));
+        assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(Path.of("src/App.java"),
+                Optional.of(Path.of("src/Old.java")), StagedFileStatus.MODIFIED, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(Path.of("src/New.java"),
+                Optional.of(Path.of("src/New.java")), StagedFileStatus.RENAMED, 0, 0));
     }
 
     @Test

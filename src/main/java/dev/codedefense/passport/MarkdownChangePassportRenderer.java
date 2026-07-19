@@ -27,7 +27,14 @@ public final class MarkdownChangePassportRenderer {
         line(markdown, "- Java-owned final score: " + passport.session().overallScore() + "/100");
         line(markdown, "- Java-owned readiness: " + MarkdownTextEscaper.inline(passport.session().readiness().displayName())); line(markdown, "");
         line(markdown, "## Changed files");
-        for (StagedChangeFile file : passport.change().files()) line(markdown, "- " + MarkdownTextEscaper.inline(file.path().toString().replace('\\', '/')) + " — " + file.status() + " (" + file.addedLines() + " added, " + file.deletedLines() + " deleted)");
+        for (StagedChangeFile file : passport.change().files()) {
+            String path = file.previousPath()
+                    .map(previous -> previous.toString().replace('\\', '/') + " → "
+                            + file.path().toString().replace('\\', '/'))
+                    .orElseGet(() -> file.path().toString().replace('\\', '/'));
+            line(markdown, "- " + MarkdownTextEscaper.inline(path) + " — " + file.status() + " ("
+                    + file.addedLines() + " added, " + file.deletedLines() + " deleted)");
+        }
         line(markdown, "");
         for (QuestionResult result : passport.session().results()) {
             appendQuestion(markdown, result);

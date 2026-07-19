@@ -60,11 +60,6 @@ val syncCodeDefenseCli by tasks.registering(Sync::class) {
     from(coreJar)
     into(preparedCli)
     rename { "codedefense.jar" }
-    doFirst {
-        require(coreJar.asFile.isFile) {
-            "Missing ../target/codedefense.jar. Run 'mvn clean package' from the repository root first."
-        }
-    }
 }
 
 tasks.named<Sync>("prepareSandbox") {

@@ -20,11 +20,24 @@ class BridgeJsonCodecTest {
                 new BridgeRequest.ConfirmRequest(1, true),
                 new BridgeRequest.AnswerRequest(1, SECRET),
                 new BridgeRequest.SkipRequest(1),
-                new BridgeRequest.CancelRequest(1));
+                new BridgeRequest.CancelRequest(1),
+                new ProvenanceConsentRequest(1, SECRET, true));
 
         for (BridgeRequest request : requests) {
             assertEquals(request, codec.decodeRequest(codec.encodeRequest(request)));
         }
+    }
+
+    @Test
+    void provenanceConsentIsStrictAndItsToStringHidesThreadId() {
+        ProvenanceConsentRequest request = new ProvenanceConsentRequest(1, SECRET, true);
+        assertEquals(request, codec.decodeRequest(codec.encodeRequest(request)));
+        assertFalse(request.toString().contains(SECRET));
+        assertThrows(BridgeProtocolException.class, () -> codec.decodeRequest(
+                "{\"protocolVersion\":1,\"type\":\"provenanceConsent\",\"threadId\":\"id\",\"consent\":true,\"extra\":1}\n"
+                        .getBytes(StandardCharsets.UTF_8)));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ProvenanceConsentRequest(1, "id", false));
     }
 
     @Test

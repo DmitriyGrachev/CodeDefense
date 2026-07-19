@@ -19,6 +19,7 @@ public final class BridgeConfirmationPrompt implements ConfirmationPrompt {
             case BridgeRequest.CancelRequest ignored -> false;
             case BridgeRequest.AnswerRequest ignored -> throw unexpected();
             case BridgeRequest.SkipRequest ignored -> throw unexpected();
+            case ProvenanceConsentRequest ignored -> throw unexpected();
         }).orElse(false);
     }
 

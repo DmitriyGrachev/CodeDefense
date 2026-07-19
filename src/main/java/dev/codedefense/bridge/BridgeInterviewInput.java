@@ -19,6 +19,8 @@ public final class BridgeInterviewInput implements UserInput {
             case BridgeRequest.CancelRequest ignored -> null;
             case BridgeRequest.ConfirmRequest ignored -> throw new BridgeProtocolException(
                     "Unexpected bridge request during interview.");
+            case ProvenanceConsentRequest ignored -> throw new BridgeProtocolException(
+                    "Unexpected bridge request during interview.");
         }).orElse(null);
     }
 }

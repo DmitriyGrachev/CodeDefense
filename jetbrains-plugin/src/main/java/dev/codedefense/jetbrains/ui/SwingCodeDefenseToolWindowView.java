@@ -11,6 +11,8 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.JCheckBox;
+import javax.swing.BoxLayout;
 
 public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWindowView {
     private final JPanel root = new JPanel(new BorderLayout(8, 8));
@@ -29,6 +31,9 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     private final JTextField answer = new JTextField();
     private final JButton submit = new JButton("Answer");
     private final JButton skip = new JButton("Skip");
+    private final JCheckBox provenance = new JCheckBox("Experimental Codex provenance");
+    private final JTextField threadId = new JTextField(18);
+    private final JCheckBox historyConsent = new JCheckBox("Read this selected local thread for this run only");
     private String passportPath;
 
     public SwingCodeDefenseToolWindowView() {
@@ -47,15 +52,30 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         output.setEditable(false);
         output.setLineWrap(true);
         output.setWrapStyleWord(true);
-        root.add(controls, BorderLayout.NORTH);
+        JPanel provenanceControls = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        provenanceControls.add(provenance); provenanceControls.add(new JLabel("Thread ID:"));
+        provenanceControls.add(threadId); provenanceControls.add(historyConsent);
+        provenanceControls.setVisible("true".equalsIgnoreCase(
+                System.getenv("CODEDEFENSE_EXPERIMENTAL_CODEX_PROVENANCE")));
+        JPanel north = new JPanel(); north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
+        north.add(controls); north.add(provenanceControls);
+        root.add(north, BorderLayout.NORTH);
         root.add(new JScrollPane(output), BorderLayout.CENTER);
         root.add(south, BorderLayout.SOUTH);
         setSessionActive(false);
     }
 
     public void bind(CodeDefenseToolWindowController controller) {
-        preview.addActionListener(event -> invoke(() -> controller.preview(selected(), selectorArgument(), selectedFocus())));
-        start.addActionListener(event -> invoke(() -> controller.start(selected(), selectorArgument(), selectedFocus())));
+        preview.addActionListener(event -> invoke(() -> {
+            if (provenance.isSelected()) controller.preview(selected(), selectorArgument(), selectedFocus(),
+                    threadId.getText(), historyConsent.isSelected());
+            else controller.preview(selected(), selectorArgument(), selectedFocus());
+        }));
+        start.addActionListener(event -> invoke(() -> {
+            if (provenance.isSelected()) controller.start(selected(), selectorArgument(), selectedFocus(),
+                    threadId.getText(), historyConsent.isSelected());
+            else controller.start(selected(), selectorArgument(), selectedFocus());
+        }));
         cancel.addActionListener(event -> controller.cancel());
         accept.addActionListener(event -> controller.confirm(true));
         decline.addActionListener(event -> controller.confirm(false));
@@ -94,6 +114,10 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     @Override public void showError(String value) { append("Error: " + value); }
     @Override public void clearAnswer() { answer.setText(""); }
     @Override public void showPassportStatus(String value) { append("Passport: " + value); }
+    @Override public void showProvenance(String value) { append("Experimental Codex provenance: " + value); }
+    @Override public void clearProvenanceConsent() {
+        threadId.setText(""); historyConsent.setSelected(false); provenance.setSelected(false);
+    }
 
     private void append(String value) {
         if (!output.getText().isEmpty()) output.append("\n\n");

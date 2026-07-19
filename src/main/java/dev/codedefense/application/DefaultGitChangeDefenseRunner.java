@@ -17,13 +17,16 @@ import dev.codedefense.domain.DefenseFocus;
 import dev.codedefense.domain.EmptyProjectSnapshotException;
 import dev.codedefense.domain.InterviewSession;
 import dev.codedefense.domain.ProjectSnapshot;
+import dev.codedefense.domain.CodexProvenanceSummary;
 import dev.codedefense.interview.InterviewCancelledException;
 import dev.codedefense.passport.*;
+import dev.codedefense.provenance.*;
 import dev.codedefense.terminal.ConfirmationPrompt;
 import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /** One workflow for staged, commit, and merge-base range defenses. */
@@ -34,15 +37,27 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
     private final Supplier<ConfirmationPrompt> confirmationFactory;
     private final CodeDefenseRuntimeProvider runtimeProvider;
     private final Supplier<GitChangePassportService> passportServiceFactory;
+    private final Supplier<CodexProvenanceService> provenanceServiceFactory;
 
     public DefaultGitChangeDefenseRunner(GitChangeSource source, GitChangeContextBuilder contextBuilder,
             GitChangePreviewRenderer previewRenderer, Supplier<ConfirmationPrompt> confirmationFactory,
             CodeDefenseRuntimeProvider runtimeProvider, Supplier<GitChangePassportService> passportServiceFactory) {
+        this(source, contextBuilder, previewRenderer, confirmationFactory, runtimeProvider,
+                passportServiceFactory, () -> (repository, change, threadId) -> {
+                    throw new IllegalStateException("provenance is not configured");
+                });
+    }
+
+    public DefaultGitChangeDefenseRunner(GitChangeSource source, GitChangeContextBuilder contextBuilder,
+            GitChangePreviewRenderer previewRenderer, Supplier<ConfirmationPrompt> confirmationFactory,
+            CodeDefenseRuntimeProvider runtimeProvider, Supplier<GitChangePassportService> passportServiceFactory,
+            Supplier<CodexProvenanceService> provenanceServiceFactory) {
         this.source = Objects.requireNonNull(source); this.contextBuilder = Objects.requireNonNull(contextBuilder);
         this.previewRenderer = Objects.requireNonNull(previewRenderer);
         this.confirmationFactory = Objects.requireNonNull(confirmationFactory);
         this.runtimeProvider = Objects.requireNonNull(runtimeProvider);
         this.passportServiceFactory = Objects.requireNonNull(passportServiceFactory);
+        this.provenanceServiceFactory = Objects.requireNonNull(provenanceServiceFactory);
     }
 
     public static DefaultGitChangeDefenseRunner production(Supplier<ConfirmationPrompt> confirmationFactory) {
@@ -52,7 +67,8 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
                 () -> new GitChangePassportService(source,
                         new FileSystemChangePassportStore(ChangePassportPaths.defaults(),
                                 new MarkdownChangePassportRenderer(), Clock.systemUTC()),
-                        Clock.systemUTC(), CodexRuntimeConfig.defaults().defaultModel()));
+                        Clock.systemUTC(), CodexRuntimeConfig.defaults().defaultModel()),
+                DefaultGitChangeDefenseRunner::productionProvenanceService);
     }
 
     public static DefaultGitChangeDefenseRunner productionBridge() {
@@ -62,7 +78,19 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
                 () -> new GitChangePassportService(source,
                         new FileSystemChangePassportStore(ChangePassportPaths.defaults(),
                                 new MarkdownChangePassportRenderer(), Clock.systemUTC()),
-                        Clock.systemUTC(), CodexRuntimeConfig.defaults().defaultModel()));
+                        Clock.systemUTC(), CodexRuntimeConfig.defaults().defaultModel()),
+                DefaultGitChangeDefenseRunner::productionProvenanceService);
+    }
+
+    private static CodexProvenanceService productionProvenanceService() {
+        var executor = new JdkProcessExecutor();
+        var runtime = CodexRuntimeConfig.defaults();
+        var processEnvironment = new dev.codedefense.ai.CodexProcessEnvironment();
+        var preflight = dev.codedefense.ai.CodexEnvironmentChecker.forCurrentEnvironment(
+                executor, runtime, processEnvironment, Path.of(".").toAbsolutePath().normalize());
+        return new DefaultCodexProvenanceService(
+                CodexProvenanceConfig.fromEnvironment(System.getenv()), preflight,
+                new CodexChangeMatcher());
     }
 
     @Override public int run(Path repositoryPath, ChangeSelector selector, boolean dryRun,
@@ -72,26 +100,44 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
 
     @Override public int run(Path repositoryPath, ChangeSelector selector, DefenseFocus focus, boolean dryRun,
             boolean skipConfirmation, PrintWriter out, PrintWriter err) {
-        return execute(repositoryPath, selector, focus, dryRun,
+        return execute(repositoryPath, selector, focus, dryRun, CodexProvenanceRequest.disabled(),
+                new TerminalChannel(skipConfirmation, out, err));
+    }
+
+    @Override public int run(Path repositoryPath, ChangeSelector selector, DefenseFocus focus, boolean dryRun,
+            boolean skipConfirmation, CodexProvenanceRequest provenance, PrintWriter out, PrintWriter err) {
+        return execute(repositoryPath, selector, focus, dryRun, Objects.requireNonNull(provenance),
                 new TerminalChannel(skipConfirmation, out, err));
     }
 
     /** Runs the same capture/analyze/interview/save workflow through structured bridge ports. */
     public int runBridge(Path repositoryPath, ChangeSelector selector, DefenseFocus focus, boolean dryRun,
             BridgeSession bridge) {
-        return execute(repositoryPath, selector, focus, dryRun,
-                new StructuredChannel(Objects.requireNonNull(bridge, "bridge")));
+        return runBridge(repositoryPath, selector, focus, dryRun, false, bridge);
+    }
+
+    public int runBridge(Path repositoryPath, ChangeSelector selector, DefenseFocus focus, boolean dryRun,
+            boolean provenanceRequested, BridgeSession bridge) {
+        boolean capabilityEnabled = CodexProvenanceConfig.fromEnvironment(System.getenv()).enabled();
+        return execute(repositoryPath, selector, focus, dryRun, CodexProvenanceRequest.disabled(),
+                new StructuredChannel(Objects.requireNonNull(bridge, "bridge"),
+                        capabilityEnabled, provenanceRequested));
     }
 
     private int execute(Path repositoryPath, ChangeSelector selector, DefenseFocus focus, boolean dryRun,
-            DefenseChannel channel) {
+            CodexProvenanceRequest provenanceRequest, DefenseChannel channel) {
         channel.begin();
         try {
+            provenanceRequest = channel.resolveProvenance(provenanceRequest);
             CapturedGitChange captured = source.capture(repositoryPath, selector);
+            Optional<CodexProvenanceSummary> provenance = provenanceRequest.enabled()
+                    ? Optional.of(provenanceServiceFactory.get().capture(
+                            captured.change().repositoryRoot(), captured, provenanceRequest.threadId()))
+                    : Optional.empty();
             var snapshot = contextBuilder.build(captured);
-            channel.preview(captured, snapshot, focus);
+            channel.preview(captured, snapshot, focus, provenance);
             if (dryRun) {
-                channel.dryRunCompleted();
+                channel.dryRunCompleted(provenance.isPresent());
                 return ExitCodes.SUCCESS;
             }
             if (!channel.confirm()) {
@@ -104,7 +150,7 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
             var interview = runtime.interviewRunner().conduct(analysis);
             if (interview != null) {
                 SavedChangePassport saved = passportServiceFactory.get()
-                        .createAndSave(selector, captured.change(), analysis, interview, focus);
+                        .createAndSave(selector, captured.change(), analysis, interview, focus, provenance);
                 channel.saved(saved, captured, interview);
             }
             channel.completed();
@@ -160,9 +206,11 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
 
     private interface DefenseChannel {
         void begin();
-        void preview(CapturedGitChange captured, ProjectSnapshot snapshot, DefenseFocus focus);
+        CodexProvenanceRequest resolveProvenance(CodexProvenanceRequest request);
+        void preview(CapturedGitChange captured, ProjectSnapshot snapshot, DefenseFocus focus,
+                Optional<CodexProvenanceSummary> provenance);
         boolean confirm();
-        void dryRunCompleted();
+        void dryRunCompleted(boolean provenanceRequested);
         void declined();
         CodeDefenseRuntime runtime(CodeDefenseRuntimeProvider provider);
         void saved(SavedChangePassport saved, CapturedGitChange captured, InterviewSession interview);
@@ -183,9 +231,18 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
 
         @Override public void begin() { }
 
-        @Override public void preview(CapturedGitChange captured, ProjectSnapshot snapshot, DefenseFocus focus) {
+        @Override public CodexProvenanceRequest resolveProvenance(CodexProvenanceRequest request) {
+            return request;
+        }
+
+        @Override public void preview(CapturedGitChange captured, ProjectSnapshot snapshot, DefenseFocus focus,
+                Optional<CodexProvenanceSummary> provenance) {
             previewRenderer.render(captured.change(), snapshot, out);
             out.println("Focus: " + focus.displayName());
+            provenance.ifPresent(value -> {
+                out.println("Experimental Codex provenance: " + provenanceDisplay(value));
+                out.println("Evidence consistency only; this does not prove authorship, causation, review quality, or safety.");
+            });
         }
 
         @Override public boolean confirm() {
@@ -195,9 +252,14 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
             return confirmationFactory.get().confirm(prompt);
         }
 
-        @Override public void dryRunCompleted() {
+        @Override public void dryRunCompleted(boolean provenanceRequested) {
             out.println("No source content was sent.");
-            out.println("Codex was not invoked.");
+            out.println("No model request was made.");
+            if (provenanceRequested) {
+                out.println("Codex app-server may have been invoked only to read the selected local thread.");
+            } else {
+                out.println("Codex was not invoked.");
+            }
         }
 
         @Override public void declined() {
@@ -230,20 +292,42 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
 
     private static final class StructuredChannel implements DefenseChannel {
         private final BridgeSession bridge;
+        private final boolean capabilityEnabled;
+        private final boolean provenanceRequested;
 
-        private StructuredChannel(BridgeSession bridge) {
+        private StructuredChannel(BridgeSession bridge, boolean capabilityEnabled, boolean provenanceRequested) {
             this.bridge = bridge;
+            this.capabilityEnabled = capabilityEnabled;
+            this.provenanceRequested = provenanceRequested;
         }
 
         @Override public void begin() {
-            bridge.emit(new BridgeEvent.HelloEvent(BridgeProtocol.VERSION,
-                    java.util.List.of("interactiveDefenseV1", "passportStatusV1")));
+            java.util.ArrayList<String> capabilities = new java.util.ArrayList<>(
+                    java.util.List.of("interactiveDefenseV1", "passportStatusV1"));
+            if (capabilityEnabled) capabilities.add("codexProvenanceV1");
+            bridge.emit(new BridgeEvent.HelloEvent(BridgeProtocol.VERSION, capabilities));
         }
 
-        @Override public void preview(CapturedGitChange captured, ProjectSnapshot snapshot, DefenseFocus focus) {
+        @Override public CodexProvenanceRequest resolveProvenance(CodexProvenanceRequest request) {
+            if (!provenanceRequested) return request;
+            if (!capabilityEnabled) throw new dev.codedefense.bridge.BridgeProtocolException(
+                    "Experimental Codex provenance is disabled.");
+            var bridgeRequest = bridge.readRequest().orElseThrow(() ->
+                    new dev.codedefense.bridge.BridgeProtocolException("Provenance consent was not provided."));
+            if (!(bridgeRequest instanceof dev.codedefense.bridge.ProvenanceConsentRequest consent)) {
+                throw new dev.codedefense.bridge.BridgeProtocolException("Provenance consent was not provided.");
+            }
+            return CodexProvenanceRequest.enabled(consent.threadId());
+        }
+
+        @Override public void preview(CapturedGitChange captured, ProjectSnapshot snapshot, DefenseFocus focus,
+                Optional<CodexProvenanceSummary> provenance) {
             bridge.emit(new BridgeEvent.PreviewEvent(BridgeProtocol.VERSION, snapshot.projectName(),
                     displayName(captured.change().kind()), focus.cliName(), snapshot.selectedFiles().size(),
                     captured.change().addedLines(), captured.change().deletedLines()));
+            provenance.ifPresent(value -> bridge.emit(new BridgeEvent.ProvenanceEvent(
+                    BridgeProtocol.VERSION, provenanceDisplay(value),
+                    "Evidence consistency only; this does not prove authorship, causation, review quality, or safety.")));
         }
 
         @Override public boolean confirm() {
@@ -251,7 +335,7 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
                     "Send bounded Git change context to the locally authenticated Codex CLI?");
         }
 
-        @Override public void dryRunCompleted() {
+        @Override public void dryRunCompleted(boolean provenanceRequested) {
             bridge.emit(new BridgeEvent.CompletedEvent(BridgeProtocol.VERSION, ExitCodes.SUCCESS, false));
         }
 
@@ -278,5 +362,14 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
             bridge.emit(new BridgeEvent.ErrorEvent(BridgeProtocol.VERSION, code, safe, exitCode));
             return exitCode;
         }
+    }
+
+    private static String provenanceDisplay(CodexProvenanceSummary value) {
+        return switch (value.status()) {
+            case EXACT_CHANGE_MATCH -> "Exact change match";
+            case PARTIAL_PATH_MATCH -> "Partial path match";
+            case NO_MATCH -> "No match";
+            case UNAVAILABLE -> "Unavailable";
+        };
     }
 }

@@ -5,6 +5,8 @@ import dev.codedefense.application.GitChangeDefenseRunner;
 import dev.codedefense.application.StagedChangeDefenseRunner;
 import dev.codedefense.application.RetryChangeDefenseRunner;
 import dev.codedefense.application.RetryChangeDefenseUseCase;
+import dev.codedefense.application.CodexProvenanceRequest;
+import dev.codedefense.provenance.CodexProvenanceConfig;
 import dev.codedefense.domain.ChangeSelector;
 import dev.codedefense.domain.CommitSelector;
 import dev.codedefense.domain.RangeSelector;
@@ -16,6 +18,7 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import picocli.CommandLine.ArgGroup;
@@ -31,6 +34,7 @@ public final class ProveCommand implements java.util.concurrent.Callable<Integer
     private final Function<Supplier<ConfirmationPrompt>, GitChangeDefenseRunner> runnerFactory;
     private final Supplier<Reader> inputFactory;
     private final Function<Supplier<ConfirmationPrompt>, RetryChangeDefenseRunner> retryFactory;
+    private final Supplier<Map<String, String>> environmentFactory;
 
     static final class SelectorOptions {
         @Option(names = "--staged", description = "Use exactly the staged Git index.") boolean staged;
@@ -64,39 +68,61 @@ public final class ProveCommand implements java.util.concurrent.Callable<Integer
             description = "Defense emphasis: balanced, architecture, failure-modes, or testing.")
     private String focus;
 
+    @Option(names = "--experimental-codex-provenance",
+            description = "Experimentally compare the selected change with one explicitly selected local Codex thread.")
+    private boolean experimentalCodexProvenance;
+
+    @Option(names = "--codex-thread", paramLabel = "THREAD_ID",
+            description = "Read transient file-change metadata from this local Codex thread; the transcript is never stored.")
+    private String codexThread;
+
+    @Option(names = "--consent-codex-history",
+            description = "Consent for this run to read the selected local Codex thread through app-server.")
+    private boolean consentCodexHistory;
+
     @Spec private CommandSpec commandSpec;
 
     public ProveCommand() {
         this(confirmation -> DefaultGitChangeDefenseRunner.production(confirmation),
                 confirmation -> RetryChangeDefenseUseCase.production(confirmation),
-                () -> new InputStreamReader(System.in, StandardCharsets.UTF_8), true);
+                () -> new InputStreamReader(System.in, StandardCharsets.UTF_8), System::getenv, true);
     }
 
     public ProveCommand(GitChangeDefenseRunner runner) {
         this(confirmation -> Objects.requireNonNull(runner),
-                confirmation -> unavailableRetry(), () -> new InputStreamReader(System.in, StandardCharsets.UTF_8), true);
+                confirmation -> unavailableRetry(), () -> new InputStreamReader(System.in, StandardCharsets.UTF_8),
+                System::getenv, true);
     }
 
     public ProveCommand(StagedChangeDefenseRunner runner) {
-        this(confirmation -> adapt(runner), confirmation -> unavailableRetry(), () -> new InputStreamReader(System.in, StandardCharsets.UTF_8), true);
+        this(confirmation -> adapt(runner), confirmation -> unavailableRetry(),
+                () -> new InputStreamReader(System.in, StandardCharsets.UTF_8), System::getenv, true);
     }
 
     public ProveCommand(Supplier<StagedChangeDefenseRunner> runnerFactory) {
         this(confirmation -> adapt(Objects.requireNonNull(runnerFactory).get()),
-                confirmation -> unavailableRetry(), () -> new InputStreamReader(System.in, StandardCharsets.UTF_8), true);
+                confirmation -> unavailableRetry(), () -> new InputStreamReader(System.in, StandardCharsets.UTF_8),
+                System::getenv, true);
     }
 
     ProveCommand(Function<Supplier<ConfirmationPrompt>, StagedChangeDefenseRunner> runnerFactory,
             Supplier<Reader> inputFactory) {
-        this(confirmation -> adapt(runnerFactory.apply(confirmation)), confirmation -> unavailableRetry(), inputFactory, true);
+        this(confirmation -> adapt(runnerFactory.apply(confirmation)), confirmation -> unavailableRetry(),
+                inputFactory, System::getenv, true);
+    }
+
+    ProveCommand(GitChangeDefenseRunner runner, Supplier<Map<String, String>> environmentFactory) {
+        this(confirmation -> Objects.requireNonNull(runner), confirmation -> unavailableRetry(),
+                () -> new InputStreamReader(System.in, StandardCharsets.UTF_8), environmentFactory, true);
     }
 
     private ProveCommand(Function<Supplier<ConfirmationPrompt>, GitChangeDefenseRunner> runnerFactory,
             Function<Supplier<ConfirmationPrompt>, RetryChangeDefenseRunner> retryFactory,
-            Supplier<Reader> inputFactory, boolean ignored) {
+            Supplier<Reader> inputFactory, Supplier<Map<String, String>> environmentFactory, boolean ignored) {
         this.runnerFactory = Objects.requireNonNull(runnerFactory);
         this.retryFactory = Objects.requireNonNull(retryFactory);
         this.inputFactory = Objects.requireNonNull(inputFactory);
+        this.environmentFactory = Objects.requireNonNull(environmentFactory);
     }
 
     @Override public Integer call() {
@@ -108,11 +134,29 @@ public final class ProveCommand implements java.util.concurrent.Callable<Integer
             commandSpec.commandLine().getErr().println("Unknown defense focus.");
             return ExitCodes.INVALID_USAGE;
         }
+        int provenanceParts = (experimentalCodexProvenance ? 1 : 0)
+                + (codexThread != null ? 1 : 0) + (consentCodexHistory ? 1 : 0);
+        if (provenanceParts != 0 && provenanceParts != 3) {
+            commandSpec.commandLine().getErr().println(
+                    "Experimental Codex provenance requires all three consent options.");
+            return ExitCodes.INVALID_USAGE;
+        }
+        if (provenanceParts == 3 && !"true".equalsIgnoreCase(
+                environmentFactory.get().get(CodexProvenanceConfig.ENABLE_VARIABLE))) {
+            commandSpec.commandLine().getErr().println("Experimental Codex provenance is disabled.");
+            return ExitCodes.INVALID_USAGE;
+        }
         if (selector.retry != null) {
+            if (provenanceParts != 0) {
+                commandSpec.commandLine().getErr().println("Experimental Codex provenance is unavailable for retry.");
+                return ExitCodes.INVALID_USAGE;
+            }
             return retryFactory.apply(confirmation).retry(selector.retry, path, dryRun, yes,
                     commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr());
         }
-        return runnerFactory.apply(confirmation).run(path, selector.selector(), selectedFocus, dryRun, yes,
+        CodexProvenanceRequest provenance = provenanceParts == 3
+                ? CodexProvenanceRequest.enabled(codexThread) : CodexProvenanceRequest.disabled();
+        return runnerFactory.apply(confirmation).run(path, selector.selector(), selectedFocus, dryRun, yes, provenance,
                 commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr());
     }
 

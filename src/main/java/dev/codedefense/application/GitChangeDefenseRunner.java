@@ -13,4 +13,8 @@ public interface GitChangeDefenseRunner {
             boolean skipConfirmation, PrintWriter out, PrintWriter err) {
         return run(repositoryPath, selector, dryRun, skipConfirmation, out, err);
     }
+    default int run(Path repositoryPath, ChangeSelector selector, DefenseFocus focus, boolean dryRun,
+            boolean skipConfirmation, CodexProvenanceRequest provenance, PrintWriter out, PrintWriter err) {
+        return run(repositoryPath, selector, focus, dryRun, skipConfirmation, out, err);
+    }
 }

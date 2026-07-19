@@ -29,6 +29,10 @@ public final class BridgeProveCommand implements java.util.concurrent.Callable<I
     public interface BridgeDefenseRunner {
         int run(Path repositoryPath, ChangeSelector selector, DefenseFocus focus, boolean dryRun,
                 BridgeSession session);
+        default int run(Path repositoryPath, ChangeSelector selector, DefenseFocus focus, boolean dryRun,
+                boolean provenanceRequested, BridgeSession session) {
+            return run(repositoryPath, selector, focus, dryRun, session);
+        }
     }
 
     private final BridgeDefenseRunner runner;
@@ -43,13 +47,24 @@ public final class BridgeProveCommand implements java.util.concurrent.Callable<I
     @Option(names = "--range", paramLabel = "BASE...HEAD") private String range;
     @Option(names = "--focus", defaultValue = "balanced") private String focus;
     @Option(names = "--dry-run") private boolean dryRun;
+    @Option(names = "--experimental-codex-provenance") private boolean experimentalCodexProvenance;
     @Parameters(index = "0", arity = "0..1", defaultValue = ".", paramLabel = "PATH")
     private Path path;
 
     public BridgeProveCommand() {
-        this((repository, selector, selectedFocus, previewOnly, session) ->
-                        DefaultGitChangeDefenseRunner.productionBridge()
-                                .runBridge(repository, selector, selectedFocus, previewOnly, session),
+        this(new BridgeDefenseRunner() {
+                    @Override public int run(Path repository, ChangeSelector selector,
+                            DefenseFocus selectedFocus, boolean previewOnly, BridgeSession session) {
+                        return DefaultGitChangeDefenseRunner.productionBridge()
+                                .runBridge(repository, selector, selectedFocus, previewOnly, session);
+                    }
+                    @Override public int run(Path repository, ChangeSelector selector,
+                            DefenseFocus selectedFocus, boolean previewOnly,
+                            boolean provenanceRequested, BridgeSession session) {
+                        return DefaultGitChangeDefenseRunner.productionBridge().runBridge(
+                                repository, selector, selectedFocus, previewOnly, provenanceRequested, session);
+                    }
+                },
                 () -> System.in, () -> System.out, () -> System.err);
     }
 
@@ -72,7 +87,8 @@ public final class BridgeProveCommand implements java.util.concurrent.Callable<I
             }
             ChangeSelector selector = selector();
             DefenseFocus selectedFocus = DefenseFocus.parse(focus);
-            return runner.run(path, selector, selectedFocus, dryRun, session);
+            return runner.run(path, selector, selectedFocus, dryRun,
+                    experimentalCodexProvenance, session);
         } catch (IllegalArgumentException | NullPointerException exception) {
             return invalid(session, "Bridge prove options are invalid.");
         } catch (BridgeProtocolException exception) {

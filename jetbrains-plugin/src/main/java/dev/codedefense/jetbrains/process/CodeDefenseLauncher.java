@@ -23,7 +23,11 @@ public interface CodeDefenseLauncher {
         STAGED, COMMIT, RANGE
     }
 
-    record BridgeLaunchSpec(Selector selector, String selectorValue, String focus, boolean dryRun) {
+    record BridgeLaunchSpec(Selector selector, String selectorValue, String focus, boolean dryRun,
+            boolean provenanceRequested) {
+        public BridgeLaunchSpec(Selector selector, String selectorValue, String focus, boolean dryRun) {
+            this(selector, selectorValue, focus, dryRun, false);
+        }
         public BridgeLaunchSpec {
             Objects.requireNonNull(selector, "selector");
             if (focus == null || !List.of("balanced", "architecture", "failure-modes", "testing")
@@ -86,6 +90,9 @@ final class JdkCodeDefenseLauncher implements CodeDefenseLauncher {
         command.add(spec.focus());
         if (spec.dryRun()) {
             command.add("--dry-run");
+        }
+        if (spec.provenanceRequested()) {
+            command.add("--experimental-codex-provenance");
         }
         command.add(root.toString());
         return List.copyOf(command);

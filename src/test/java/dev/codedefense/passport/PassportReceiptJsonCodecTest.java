@@ -8,6 +8,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.codedefense.domain.PassportReceipt;
 import dev.codedefense.domain.PassportStatus;
+import dev.codedefense.domain.ChangePassport;
+import dev.codedefense.domain.CodexProvenanceStatus;
+import dev.codedefense.domain.CodexProvenanceSummary;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
@@ -49,6 +55,28 @@ class PassportReceiptJsonCodecTest {
         assertSafeFailure(valid.replaceFirst("\"overallScore\":55", "\"overallScore\":55.5")
                 .getBytes(StandardCharsets.UTF_8));
         assertSafeFailure(new byte[256 * 1024 + 1]);
+    }
+
+    @Test
+    void roundTripsSchemaFourWithoutThreadOrTranscriptContent() {
+        ChangePassport original = PassportTestFixtures.passport(PassportStatus.CURRENT);
+        CodexProvenanceSummary summary = new CodexProvenanceSummary(1,
+                CodexProvenanceStatus.PARTIAL_PATH_MATCH, "e".repeat(64), "0.144.0",
+                2, 1, List.of("src/App.java"), Instant.parse("2026-07-19T12:00:00Z"));
+        ChangePassport passport = new ChangePassport(original.change(), original.changeKind(),
+                original.sourceIdentity(), original.analysis(), original.session(), original.createdAt(),
+                original.model(), original.statusAtCreation(), original.focus(), Optional.of(summary));
+        PassportReceipt schemaFour = PassportReceipt.from(passport,
+                "7bd53719-1de8-4c78-a48a-430aa38555dc");
+
+        String json = new String(codec.encode(schemaFour), StandardCharsets.UTF_8);
+
+        assertEquals(4, schemaFour.schemaVersion());
+        assertEquals(schemaFour, codec.decode(codec.encode(schemaFour)));
+        assertTrue(json.contains("\"codexProvenance\""));
+        assertFalse(json.contains("private-thread-id"));
+        assertFalse(json.contains("PRIVATE-TRANSCRIPT"));
+        assertFalse(json.contains("@@ -1 +1 @@"));
     }
 
     private void assertSafeFailure(byte[] input) {

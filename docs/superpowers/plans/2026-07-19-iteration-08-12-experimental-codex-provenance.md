@@ -74,7 +74,7 @@ public interface CodexAppServerClient extends AutoCloseable {
 }
 ```
 
-- [ ] Launch exact tokens `<CodexExecutable.commandPrefix()> app-server --stdio`. Reuse resolver semantics for native launchers and Windows `codex.ps1`; never shell-wrap.
+- [x] Launch exact tokens `<CodexExecutable.commandPrefix()> app-server --listen stdio://`, matching the current official app-server CLI contract. Reuse resolver semantics for native launchers and Windows `codex.ps1`; never shell-wrap.
 - [ ] Start stdout/stderr drainers immediately on virtual threads. Write newline-delimited request objects and correlate bounded numeric IDs with responses while ignoring permitted notifications.
 - [ ] Send `initialize` with client name/title/version and `capabilities.experimentalApi=true`, then send `initialized` before any thread request, matching the official protocol.
 - [ ] Reject pre-handshake data, duplicate response IDs, malformed JSON, unknown required fields, oversized lines/totals, truncation, EOF, timeout, and nonzero exit with one safe error that contains no server payload.

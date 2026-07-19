@@ -93,6 +93,27 @@ class CodeDefenseToolWindowControllerTest {
         assertFalse(view.active);
     }
 
+    @Test
+    void sendsThreadIdOnlyAfterCapabilityAndClearsPerRunConsent() {
+        FakeView view = new FakeView();
+        FakeLauncher launcher = new FakeLauncher();
+        var controller = controller(view, launcher);
+
+        controller.preview(Selector.STAGED, null, "balanced", "private-thread-id", true);
+        assertTrue(launcher.spec.provenanceRequested());
+        assertTrue(launcher.requests.isEmpty());
+        launcher.event("{\"protocolVersion\":1,\"type\":\"hello\","
+                + "\"capabilities\":[\"interactiveDefenseV1\",\"codexProvenanceV1\"]}\n");
+        launcher.event("{\"protocolVersion\":1,\"type\":\"provenance\","
+                + "\"status\":\"Exact change match\",\"disclaimer\":\"Does not prove authorship.\"}\n");
+
+        assertEquals(1, launcher.requests.size());
+        assertTrue(launcher.requests.getFirst().contains("private-thread-id"));
+        assertFalse(launcher.spec.toString().contains("private-thread-id"));
+        assertTrue(view.provenanceCleared);
+        assertTrue(view.text.stream().anyMatch(value -> value.contains("Exact change match")));
+    }
+
     private CodeDefenseToolWindowController controller(FakeView view, FakeLauncher launcher) {
         return new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(), Runnable::run);
     }
@@ -141,6 +162,7 @@ class CodeDefenseToolWindowControllerTest {
         private boolean confirmationShown;
         private boolean answerCleared;
         private String passportPath;
+        private boolean provenanceCleared;
 
         @Override public void setSessionActive(boolean value) { active = value; }
         @Override public void showPreview(String value) { text.add(value); }
@@ -153,5 +175,7 @@ class CodeDefenseToolWindowControllerTest {
         @Override public void showCompleted(String value) { text.add(value); }
         @Override public void showError(String value) { text.add(value); }
         @Override public void clearAnswer() { answerCleared = true; }
+        @Override public void clearProvenanceConsent() { provenanceCleared = true; }
+        @Override public void showProvenance(String value) { text.add(value); }
     }
 }

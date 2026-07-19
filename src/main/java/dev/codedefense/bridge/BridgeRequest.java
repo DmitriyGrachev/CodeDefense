@@ -5,7 +5,7 @@ import java.util.Objects;
 
 /** Messages accepted from an IDE adapter. */
 public sealed interface BridgeRequest permits BridgeRequest.ConfirmRequest, BridgeRequest.AnswerRequest,
-        BridgeRequest.SkipRequest, BridgeRequest.CancelRequest {
+        BridgeRequest.SkipRequest, BridgeRequest.CancelRequest, ProvenanceConsentRequest {
     int protocolVersion();
 
     record ConfirmRequest(int protocolVersion, boolean accepted) implements BridgeRequest {

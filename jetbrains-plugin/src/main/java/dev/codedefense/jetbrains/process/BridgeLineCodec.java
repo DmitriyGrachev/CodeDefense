@@ -103,6 +103,10 @@ public final class BridgeLineCodec {
                 fields(root, "protocolVersion", "type", "path", "status", "shortFingerprint");
                 text(root, "path", 4096); text(root, "status", 32); text(root, "shortFingerprint", 64);
             }
+            case "provenance" -> {
+                fields(root, "protocolVersion", "type", "status", "disclaimer");
+                text(root, "status", 64); text(root, "disclaimer", 512);
+            }
             case "completed" -> {
                 fields(root, "protocolVersion", "type", "exitCode", "codexInvoked");
                 integer(root, "exitCode", 0, 255); bool(root, "codexInvoked");
@@ -179,6 +183,18 @@ public final class BridgeLineCodec {
 
     public byte[] cancelRequest() {
         return encode(request("cancel"));
+    }
+
+    public byte[] provenanceConsentRequest(String threadId, boolean consent) {
+        Objects.requireNonNull(threadId, "threadId");
+        if (!consent || threadId.isBlank() || threadId.getBytes(StandardCharsets.UTF_8).length > 4_096
+                || threadId.chars().anyMatch(Character::isISOControl)) {
+            throw new BridgeTransportException("The provenance consent request is invalid.");
+        }
+        var root = request("provenanceConsent");
+        root.put("threadId", threadId);
+        root.put("consent", true);
+        return encode(root);
     }
 
     private com.fasterxml.jackson.databind.node.ObjectNode request(String type) {
@@ -268,6 +284,19 @@ public final class BridgeLineCodec {
                     throw new BridgeTransportException("The bridge event field is invalid.");
                 }
                 result.add(item.intValue());
+            });
+            return List.copyOf(result);
+        }
+
+        public List<String> strings(String field) {
+            JsonNode value = node.get(field);
+            if (value == null || !value.isArray()) {
+                throw new BridgeTransportException("The bridge event field is invalid.");
+            }
+            List<String> result = new ArrayList<>();
+            value.forEach(item -> {
+                if (!item.isTextual()) throw new BridgeTransportException("The bridge event field is invalid.");
+                result.add(item.textValue());
             });
             return List.copyOf(result);
         }

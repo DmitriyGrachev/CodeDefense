@@ -13,4 +13,6 @@ public interface CodeDefenseToolWindowView {
     void showError(String value);
     void clearAnswer();
     default void showPassportStatus(String value) { }
+    default void showProvenance(String value) { }
+    default void clearProvenanceConsent() { }
 }

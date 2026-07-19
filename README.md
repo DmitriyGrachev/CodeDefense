@@ -113,7 +113,30 @@ Portable handoffs use `passport handoff create`, `inspect`, and `match`. A `.cdh
 
 Staged source context is built from bounded unified hunks for at most 30 deterministically prioritized supported files. Repository paths are passed to Git as literal pathspecs, and HEAD/index identity is checked again after initial capture; if it changed, CodeDefense aborts and asks you to retry. Exact renames retain both old and new paths. A pure rename with no changed source lines is intentionally not enough to start a defense, and unchanged whole-file content is not sent as an artificial addition.
 
-Passports and proof output exclude staged source, diffs, blobs, answers, raw model JSON, expected key points, and evidence reasons. JSON receipts are educational records, not approval to merge or deploy. This mode does not add an application server or session matching, browser integration, GitHub/PR/CI/signing/cloud/dashboard integration.
+Passports and proof output exclude staged source, diffs, blobs, answers, raw model JSON, expected key points, and evidence reasons. JSON receipts are educational records, not approval to merge or deploy. The optional experiment below adds narrowly bounded local app-server matching; the default proof mode still performs no session matching. Neither mode adds browser integration, GitHub/PR/CI/signing/cloud/dashboard integration.
+
+## Experimental consented Codex provenance
+
+Iteration 8.12 can compare the exact defended Git hunks with file-change items from one local Codex thread selected by the user. It is disabled by default and requires a process-level kill switch plus three explicit per-run options:
+
+```powershell
+$env:CODEDEFENSE_EXPERIMENTAL_CODEX_PROVENANCE = "true"
+java -jar target/codedefense.jar prove --staged . `
+  --experimental-codex-provenance `
+  --codex-thread <THREAD_ID> `
+  --consent-codex-history `
+  --dry-run
+```
+
+CodeDefense launches the installed Codex app-server over local stdio, performs the documented initialize/initialized handshake, and reads only the named thread. It never calls `thread/list`, guesses a recent thread, starts or resumes a turn, sends a model request, or reads Codex session/rollout files directly. The operation is bounded to 15 seconds, 1 MiB per JSONL line, 8 MiB total input, 1,000 relevant items, and 100 relevant paths.
+
+Thread messages, reasoning, commands, tool output, patches, prompts, answers, the raw thread ID, and the thread working directory are transient and are never written to the Passport or receipt. Schema-v4 receipts retain only a domain-validated status, an opaque salted SHA-256 thread identity, the compatible Codex version, selected/matched counts, matched relative paths, and capture time. Older receipts remain schema compatible without provenance.
+
+`Exact change match` means only that normalized, secret-redacted file-change evidence in the selected thread is consistent with every eligible defended Git hunk. `Partial path match`, `No match`, and `Unavailable` are informational. No provenance status changes questions, model evaluation, Java-owned scores, readiness, Passport validity, or CURRENT/EXPIRED identity. A match does not prove authorship, exclusive causation, review quality, safety, or that no later human edit occurred.
+
+The IntelliJ plugin exposes the experiment only when it inherits the kill switch. A thread ID and consent are held for one run, sent in a bounded bridge request only after the core advertises `codexProvenanceV1`, and cleared immediately. The ID never appears in child-process arguments, plugin settings, notifications, or logs.
+
+Offline fixture compatibility is recorded in [the app-server compatibility matrix](docs/codex-app-server-compatibility.md). A real local thread read is a separate opt-in acceptance gate and is never run by Maven or Gradle tests.
 
 ## Privacy model
 
@@ -159,6 +182,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter and remains unchecked until installed-plugin acceptance. Iteration 8.12 and final Iteration 9 remain future work.
+Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter and remains unchecked until installed-plugin acceptance. Iteration 8.12 is implemented behind an off-by-default kill switch and remains unchecked until a separately authorized real-thread acceptance read. Final Iteration 9 remains future work.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

@@ -30,6 +30,18 @@ class BridgeLineCodecTest {
     }
 
     @Test
+    void writesEphemeralProvenanceConsentWithoutExposingItInDiagnostics() {
+        String threadId = "private-thread-id";
+        String json = new String(codec.provenanceConsentRequest(threadId, true), StandardCharsets.UTF_8);
+
+        assertEquals("{\"protocolVersion\":1,\"type\":\"provenanceConsent\","
+                + "\"threadId\":\"private-thread-id\",\"consent\":true}\n", json);
+        assertFalse(codec.toString().contains(threadId));
+        assertThrows(BridgeTransportException.class,
+                () -> codec.provenanceConsentRequest(threadId, false));
+    }
+
+    @Test
     void rejectsMalformedUtf8DuplicateKeysTrailingTokensAndOversizedLines() {
         assertThrows(BridgeTransportException.class,
                 () -> codec.decodeEvent(new byte[] {'{', (byte) 0xC3, '}', '\n'}));

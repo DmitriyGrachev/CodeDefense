@@ -30,6 +30,10 @@ public final class BridgeJsonCodec {
             case BridgeRequest.AnswerRequest value -> node.put("answer", value.answer());
             case BridgeRequest.SkipRequest ignored -> { }
             case BridgeRequest.CancelRequest ignored -> { }
+            case ProvenanceConsentRequest value -> {
+                node.put("threadId", value.threadId());
+                node.put("consent", value.consent());
+            }
         }
         return encode(node);
     }
@@ -75,6 +79,10 @@ public final class BridgeJsonCodec {
                 node.put("status", value.status());
                 node.put("shortFingerprint", value.shortFingerprint());
             }
+            case BridgeEvent.ProvenanceEvent value -> {
+                node.put("status", value.status());
+                node.put("disclaimer", value.disclaimer());
+            }
             case BridgeEvent.CompletedEvent value -> {
                 node.put("exitCode", value.exitCode());
                 node.put("codexInvoked", value.codexInvoked());
@@ -109,6 +117,10 @@ public final class BridgeJsonCodec {
                 case "cancel" -> {
                     fields(node, "protocolVersion", "type");
                     yield new BridgeRequest.CancelRequest(version);
+                }
+                case "provenanceConsent" -> {
+                    fields(node, "protocolVersion", "type", "threadId", "consent");
+                    yield new ProvenanceConsentRequest(version, text(node, "threadId"), bool(node, "consent"));
                 }
                 default -> throw invalid();
             };
@@ -164,6 +176,10 @@ public final class BridgeJsonCodec {
                     fields(node, "protocolVersion", "type", "path", "status", "shortFingerprint");
                     yield new BridgeEvent.PassportSavedEvent(version, text(node, "path"), text(node, "status"),
                             text(node, "shortFingerprint"));
+                }
+                case "provenance" -> {
+                    fields(node, "protocolVersion", "type", "status", "disclaimer");
+                    yield new BridgeEvent.ProvenanceEvent(version, text(node, "status"), text(node, "disclaimer"));
                 }
                 case "completed" -> {
                     fields(node, "protocolVersion", "type", "exitCode", "codexInvoked");
@@ -245,6 +261,7 @@ public final class BridgeJsonCodec {
             case BridgeRequest.AnswerRequest ignored -> "answer";
             case BridgeRequest.SkipRequest ignored -> "skip";
             case BridgeRequest.CancelRequest ignored -> "cancel";
+            case ProvenanceConsentRequest ignored -> "provenanceConsent";
         };
     }
 
@@ -258,6 +275,7 @@ public final class BridgeJsonCodec {
             case BridgeEvent.QuestionScoreEvent ignored -> "questionScore";
             case BridgeEvent.SummaryEvent ignored -> "summary";
             case BridgeEvent.PassportSavedEvent ignored -> "passportSaved";
+            case BridgeEvent.ProvenanceEvent ignored -> "provenance";
             case BridgeEvent.CompletedEvent ignored -> "completed";
             case BridgeEvent.ErrorEvent ignored -> "error";
         };

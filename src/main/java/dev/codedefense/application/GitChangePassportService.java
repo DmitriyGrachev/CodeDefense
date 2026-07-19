@@ -9,10 +9,12 @@ import dev.codedefense.domain.InterviewSession;
 import dev.codedefense.domain.PassportStatus;
 import dev.codedefense.domain.ProjectAnalysis;
 import dev.codedefense.domain.DefenseFocus;
+import dev.codedefense.domain.CodexProvenanceSummary;
 import dev.codedefense.passport.ChangePassportStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class GitChangePassportService {
     private final GitChangeSource source;
@@ -29,10 +31,16 @@ public final class GitChangePassportService {
     }
     public SavedChangePassport createAndSave(ChangeSelector selector, GitChange before,
             ProjectAnalysis analysis, InterviewSession session, DefenseFocus focus) {
+        return createAndSave(selector, before, analysis, session, focus, Optional.empty());
+    }
+    public SavedChangePassport createAndSave(ChangeSelector selector, GitChange before,
+            ProjectAnalysis analysis, InterviewSession session, DefenseFocus focus,
+            Optional<CodexProvenanceSummary> provenance) {
         var current = source.captureIdentity(before.repositoryRoot(), selector);
         PassportStatus status = before.identity().equals(current) ? PassportStatus.CURRENT : PassportStatus.EXPIRED;
         ChangePassport passport = new ChangePassport(GitChangeAdapters.asStagedChange(before), before.kind(),
-                before.targetIdentity(), analysis, session, Instant.now(clock), model, status, focus);
+                before.targetIdentity(), analysis, session, Instant.now(clock), model, status, focus,
+                Objects.requireNonNull(provenance, "provenance"));
         return new SavedChangePassport(store.save(passport), status);
     }
 }

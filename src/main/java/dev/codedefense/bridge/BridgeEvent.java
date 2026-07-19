@@ -6,7 +6,7 @@ import java.util.List;
 public sealed interface BridgeEvent permits BridgeEvent.HelloEvent, BridgeEvent.PreviewEvent,
         BridgeEvent.ConfirmationRequiredEvent, BridgeEvent.QuestionEvent, BridgeEvent.EvaluationEvent,
         BridgeEvent.QuestionScoreEvent, BridgeEvent.SummaryEvent, BridgeEvent.PassportSavedEvent,
-        BridgeEvent.CompletedEvent, BridgeEvent.ErrorEvent {
+        BridgeEvent.ProvenanceEvent, BridgeEvent.CompletedEvent, BridgeEvent.ErrorEvent {
     int protocolVersion();
 
     record HelloEvent(int protocolVersion, List<String> capabilities) implements BridgeEvent {
@@ -105,6 +105,14 @@ public sealed interface BridgeEvent permits BridgeEvent.HelloEvent, BridgeEvent.
             path = BridgeProtocol.requireText(path, "path", 4096);
             status = BridgeProtocol.requireText(status, "status", 32);
             shortFingerprint = BridgeProtocol.requireText(shortFingerprint, "shortFingerprint", 64);
+        }
+    }
+
+    record ProvenanceEvent(int protocolVersion, String status, String disclaimer) implements BridgeEvent {
+        public ProvenanceEvent {
+            BridgeProtocol.requireVersion(protocolVersion);
+            status = BridgeProtocol.requireText(status, "status", 64);
+            disclaimer = BridgeProtocol.requireText(disclaimer, "disclaimer", 512);
         }
     }
 

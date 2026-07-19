@@ -2,6 +2,8 @@ package dev.codedefense.jetbrains.process;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -23,6 +25,22 @@ class CodeDefenseLauncherTest {
                 new JavaExecutableResolver().resolve(javaHome));
         assertThrows(BridgeTransportException.class,
                 () -> new JavaExecutableResolver().resolve(temp.resolve("missing")));
+    }
+
+    @Test
+    void provenanceLaunchUsesOnlyFeatureFlagAndNeverThreadId() throws Exception {
+        Path javaHome = Files.createDirectories(temp.resolve("runtime-provenance"));
+        Files.createFile(Files.createDirectories(javaHome.resolve("bin"))
+                .resolve(isWindows() ? "java.exe" : "java"));
+        Path jar = Files.createFile(temp.resolve("codedefense.jar"));
+        Path project = Files.createDirectories(temp.resolve("project"));
+        var launcher = new JdkCodeDefenseLauncher(jar, javaHome);
+        var spec = new CodeDefenseLauncher.BridgeLaunchSpec(
+                CodeDefenseLauncher.Selector.STAGED, null, "balanced", true, true);
+        List<String> command = launcher.command(project, spec);
+
+        assertTrue(command.contains("--experimental-codex-provenance"));
+        assertFalse(command.stream().anyMatch(token -> token.contains("private-thread-id")));
     }
 
     @Test

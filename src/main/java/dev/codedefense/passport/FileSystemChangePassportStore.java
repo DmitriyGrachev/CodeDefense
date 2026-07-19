@@ -68,14 +68,14 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
         var initialReceipt = dev.codedefense.domain.PassportReceipt.from(passport, receiptId);
         var previous = listByFingerprint(initialReceipt.diffFingerprint(), 20).stream().findFirst();
         var receipt = previous.map(value -> new dev.codedefense.domain.PassportReceipt(
-                3, receiptId, initialReceipt.repositoryIdentityHash(), initialReceipt.changeKind(),
+                initialReceipt.schemaVersion(), receiptId, initialReceipt.repositoryIdentityHash(), initialReceipt.changeKind(),
                 initialReceipt.baseCommit(), initialReceipt.sourceIdentity(), initialReceipt.diffFingerprint(),
                 initialReceipt.createdAt(), initialReceipt.statusAtCreation(), initialReceipt.files(),
                 initialReceipt.categories(), initialReceipt.overallScore(), initialReceipt.readiness(),
                 initialReceipt.skippedPrimaryCount(), initialReceipt.model(),
                 new dev.codedefense.domain.PassportAttemptId(receiptId),
                 java.util.Optional.of(value.receipt().attemptId()), value.receipt().attemptNumber() + 1,
-                initialReceipt.focus())).orElse(initialReceipt);
+                initialReceipt.focus(), initialReceipt.codexProvenance())).orElse(initialReceipt);
         byte[] receiptData = receiptCodec.encode(receipt);
         Path artifactTemp = null, receiptTemp = null, pointerTemp = null, destination = null,
                 receiptDestination = null;

@@ -27,12 +27,13 @@ public record PassportReceipt(
         PassportAttemptId attemptId,
         Optional<PassportAttemptId> supersedes,
         int attemptNumber,
-        DefenseFocus focus) {
+        DefenseFocus focus,
+        Optional<CodexProvenanceSummary> codexProvenance) {
     private static final List<String> CATEGORY_IDS =
             List.of("decision", "counterfactual", "test-prediction");
 
     public PassportReceipt {
-        if (schemaVersion < 1 || schemaVersion > 3) {
+        if (schemaVersion < 1 || schemaVersion > 4) {
             throw new IllegalArgumentException("unsupported receipt schema version");
         }
         receiptId = requireUuid(receiptId);
@@ -61,6 +62,10 @@ public record PassportReceipt(
             throw new IllegalArgumentException("attempt lineage is invalid");
         }
         Objects.requireNonNull(focus, "focus");
+        Objects.requireNonNull(codexProvenance, "codexProvenance");
+        if ((schemaVersion == 4) != codexProvenance.isPresent()) {
+            throw new IllegalArgumentException("receipt schema 4 requires provenance and older schemas forbid it");
+        }
     }
 
     public PassportReceipt(int schemaVersion, String receiptId, String repositoryIdentityHash,
@@ -71,7 +76,19 @@ public record PassportReceipt(
         this(schemaVersion, receiptId, repositoryIdentityHash, changeKind, baseCommit, sourceIdentity,
                 diffFingerprint, createdAt, statusAtCreation, files, categories, overallScore, readiness,
                 skippedPrimaryCount, model, new PassportAttemptId(receiptId), Optional.empty(), 1,
-                DefenseFocus.BALANCED);
+                DefenseFocus.BALANCED, Optional.empty());
+    }
+
+    public PassportReceipt(int schemaVersion, String receiptId, String repositoryIdentityHash,
+            ChangeKind changeKind, String baseCommit, String sourceIdentity, String diffFingerprint,
+            Instant createdAt, PassportStatus statusAtCreation, List<PassportFileReceipt> files,
+            List<PassportCategoryReceipt> categories, int overallScore, Readiness readiness,
+            int skippedPrimaryCount, String model, PassportAttemptId attemptId,
+            Optional<PassportAttemptId> supersedes, int attemptNumber, DefenseFocus focus) {
+        this(schemaVersion, receiptId, repositoryIdentityHash, changeKind, baseCommit, sourceIdentity,
+                diffFingerprint, createdAt, statusAtCreation, files, categories, overallScore,
+                readiness, skippedPrimaryCount, model, attemptId, supersedes, attemptNumber, focus,
+                Optional.empty());
     }
 
     public static PassportReceipt from(ChangePassport passport, String receiptId) {
@@ -81,14 +98,15 @@ public record PassportReceipt(
 
     public static PassportReceipt from(ChangePassport passport, String receiptId, DefenseFocus focus) {
         Objects.requireNonNull(passport, "passport");
-        return new PassportReceipt(3, receiptId, passport.change().repositoryIdentityHash(),
+        int schemaVersion = passport.codexProvenance().isPresent() ? 4 : 3;
+        return new PassportReceipt(schemaVersion, receiptId, passport.change().repositoryIdentityHash(),
                 passport.changeKind(), passport.change().baseCommit(), passport.sourceIdentity(),
                 passport.change().diffFingerprint(), passport.createdAt(), passport.statusAtCreation(),
                 passport.change().files().stream().limit(30).map(PassportFileReceipt::from).toList(),
                 passport.session().results().stream().map(PassportCategoryReceipt::from).toList(),
                 passport.session().overallScore(), passport.session().readiness(),
                 passport.session().skippedQuestionCount(), passport.model(),
-                new PassportAttemptId(receiptId), Optional.empty(), 1, focus);
+                new PassportAttemptId(receiptId), Optional.empty(), 1, focus, passport.codexProvenance());
     }
 
     public PassportAttemptSummary attemptSummary() {

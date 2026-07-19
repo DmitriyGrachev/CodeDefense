@@ -127,6 +127,22 @@ CodeDefense selects at most 30 files and limits the snapshot to 120 KiB. It prev
 
 On Windows, CodeDefense never directly launches `codex.cmd` or the extensionless npm Unix shim, and it does not use `cmd.exe /c` or PowerShell `-Command`.
 
+## IntelliJ IDEA plugin
+
+Iteration 8.11 adds a Windows-first CodeDefense Tool Window for IntelliJ IDEA 2026.1 Community and Ultimate modes. The plugin is a passive adapter: it launches the bundled shaded CLI JAR as a child Java process and exchanges bounded protocol-v1 NDJSON over stdin/stdout. Git capture, privacy filtering, Codex access, question generation, scoring, and Passport persistence remain in the CLI. The plugin does not read project source, run Git itself, parse Passport Markdown, or place answers and model text in IDE logs or settings.
+
+Build the core artifact before the isolated plugin build:
+
+```powershell
+mvn clean package
+cd jetbrains-plugin
+.\gradlew.bat test verifyPlugin buildPlugin
+```
+
+The plugin ZIP is written beneath `jetbrains-plugin/build/distributions/` and contains the plugin JAR plus `cli/codedefense.jar`. Install it through **Settings → Plugins → Install Plugin from Disk**, then open **View → Tool Windows → CodeDefense**. The Tool Window supports staged, commit, and range selectors; the four closed defense focus values; dry preview; explicit source confirmation; one-question-at-a-time answer/skip controls; cancellation; source-free Passport status; and opening only the exact regular non-symlink Passport path returned by a successful core event.
+
+Plugin settings contain only the bundled/override CLI choice, an optional validated JAR path, the default selector, and the default focus. They never contain Codex credentials, prompts, source, questions, or answers. Iteration 8.11 targets IntelliJ IDEA build `261.*` on Windows; it does not claim support for other JetBrains products or operating systems.
+
 ## Credits and opt-in live smoke
 
 Credits are consumed only by real structured `codex exec` requests. The default Maven suite never calls Codex. The Iteration 4 live smoke test is opt-in, submits one small schema-constrained request, and consumes a small amount of Codex credit:
@@ -143,6 +159,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iterations 8.11-8.12 and final Iteration 9 remain future work.
+Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter and remains unchecked until installed-plugin acceptance. Iteration 8.12 and final Iteration 9 remain future work.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

@@ -2,6 +2,8 @@
 target/
 out/
 build/
+.gradle/
+.intellijPlatform/
 dist/
 *.class
 

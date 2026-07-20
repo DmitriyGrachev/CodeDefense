@@ -469,6 +469,7 @@ Use this minimal manifest shape; omit the `hooks` field because the default loca
   "name": "codedefense",
   "version": "0.1.0",
   "description": "Show source-free staged Change Passport status and guide explicit CodeDefense workflows.",
+  "author": { "name": "CodeDefense" },
   "skills": "./skills/",
   "interface": {
     "displayName": "CodeDefense",
@@ -476,7 +477,8 @@ Use this minimal manifest shape; omit the `hooks` field because the default loca
     "longDescription": "Preview bounded staged context, inspect source-free Passport status, and guide an explicit technical defense.",
     "developerName": "CodeDefense",
     "category": "Productivity",
-    "capabilities": ["Read"]
+    "capabilities": ["Read"],
+    "defaultPrompt": "Show the source-free CodeDefense status for my staged change."
   }
 }
 ```

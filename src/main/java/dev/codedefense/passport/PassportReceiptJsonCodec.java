@@ -18,6 +18,7 @@ import dev.codedefense.domain.Verdict;
 import dev.codedefense.domain.DefenseFocus;
 import dev.codedefense.domain.CodexProvenanceStatus;
 import dev.codedefense.domain.CodexProvenanceSummary;
+import dev.codedefense.domain.EvidenceCoverageSummary;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
@@ -45,6 +46,11 @@ public final class PassportReceiptJsonCodec {
     private static final Set<String> ROOT_FIELDS_V4 = java.util.stream.Stream.concat(
             ROOT_FIELDS_V3.stream(), java.util.stream.Stream.of("codexProvenance"))
             .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    private static final Set<String> ROOT_FIELDS_V5 = java.util.stream.Stream.concat(
+            ROOT_FIELDS_V4.stream(), java.util.stream.Stream.of("evidenceCoverage"))
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    private static final Set<String> COVERAGE_FIELDS = Set.of(
+            "totalHunks", "measurableHunks", "referencedHunks");
     private static final Set<String> PROVENANCE_FIELDS = Set.of("schemaVersion", "status",
             "threadIdentityHash", "codexVersion", "selectedFileCount", "matchedFileCount",
             "matchedRelativePaths", "capturedAt");
@@ -107,17 +113,27 @@ public final class PassportReceiptJsonCodec {
             }
             if (receipt.schemaVersion() >= 3) root.put("focus", receipt.focus().cliName());
             if (receipt.schemaVersion() >= 4) {
-                CodexProvenanceSummary provenance = receipt.codexProvenance().orElseThrow();
-                ObjectNode node = root.putObject("codexProvenance");
-                node.put("schemaVersion", provenance.schemaVersion());
-                node.put("status", provenance.status().name());
-                node.put("threadIdentityHash", provenance.threadIdentityHash());
-                node.put("codexVersion", provenance.codexVersion());
-                node.put("selectedFileCount", provenance.selectedFileCount());
-                node.put("matchedFileCount", provenance.matchedFileCount());
-                ArrayNode paths = node.putArray("matchedRelativePaths");
-                provenance.matchedRelativePaths().forEach(paths::add);
-                node.put("capturedAt", provenance.capturedAt().toString());
+                if (receipt.codexProvenance().isEmpty()) root.putNull("codexProvenance");
+                else {
+                    CodexProvenanceSummary provenance = receipt.codexProvenance().orElseThrow();
+                    ObjectNode node = root.putObject("codexProvenance");
+                    node.put("schemaVersion", provenance.schemaVersion());
+                    node.put("status", provenance.status().name());
+                    node.put("threadIdentityHash", provenance.threadIdentityHash());
+                    node.put("codexVersion", provenance.codexVersion());
+                    node.put("selectedFileCount", provenance.selectedFileCount());
+                    node.put("matchedFileCount", provenance.matchedFileCount());
+                    ArrayNode paths = node.putArray("matchedRelativePaths");
+                    provenance.matchedRelativePaths().forEach(paths::add);
+                    node.put("capturedAt", provenance.capturedAt().toString());
+                }
+            }
+            if (receipt.schemaVersion() == 5) {
+                EvidenceCoverageSummary coverage = receipt.evidenceCoverage().orElseThrow();
+                ObjectNode node = root.putObject("evidenceCoverage");
+                node.put("totalHunks", coverage.totalHunks());
+                node.put("measurableHunks", coverage.measurableHunks());
+                node.put("referencedHunks", coverage.referencedHunks());
             }
             byte[] json = mapper.writeValueAsBytes(root);
             if (json.length + 1 > MAXIMUM_RECEIPT_BYTES) {
@@ -144,7 +160,8 @@ public final class PassportReceiptJsonCodec {
             int schemaVersion = integer(root, "schemaVersion");
             requireObject(root, schemaVersion == 1 ? ROOT_FIELDS_V1
                     : schemaVersion == 2 ? ROOT_FIELDS_V2
-                    : schemaVersion == 3 ? ROOT_FIELDS_V3 : ROOT_FIELDS_V4);
+                    : schemaVersion == 3 ? ROOT_FIELDS_V3
+                    : schemaVersion == 4 ? ROOT_FIELDS_V4 : ROOT_FIELDS_V5);
             List<PassportFileReceipt> files = new ArrayList<>();
             for (JsonNode node : requireArray(root, "files")) {
                 requireObject(node, FILE_FIELDS);
@@ -174,8 +191,11 @@ public final class PassportReceiptJsonCodec {
             int attemptNumber = schemaVersion == 1 ? 1 : integer(root, "attemptNumber");
             DefenseFocus focus = schemaVersion < 3 ? DefenseFocus.BALANCED
                     : DefenseFocus.parse(text(root, "focus"));
-            Optional<CodexProvenanceSummary> provenance = schemaVersion < 4 ? Optional.empty()
+            Optional<CodexProvenanceSummary> provenance = schemaVersion < 4
+                    || required(root, "codexProvenance").isNull() ? Optional.empty()
                     : Optional.of(provenance(required(root, "codexProvenance")));
+            Optional<EvidenceCoverageSummary> coverage = schemaVersion < 5 ? Optional.empty()
+                    : Optional.of(coverage(required(root, "evidenceCoverage")));
             return new PassportReceipt(schemaVersion, receiptId,
                     text(root, "repositoryIdentityHash"), ChangeKind.valueOf(text(root, "changeKind")),
                     text(root, "baseCommit"), text(root, "sourceIdentity"),
@@ -183,7 +203,7 @@ public final class PassportReceiptJsonCodec {
                     PassportStatus.valueOf(text(root, "statusAtCreation")), files, categories,
                     integer(root, "overallScore"), Readiness.valueOf(text(root, "readiness")),
                     integer(root, "skippedPrimaryCount"), text(root, "model"), attemptId, supersedes,
-                    attemptNumber, focus, provenance);
+                    attemptNumber, focus, provenance, coverage);
         } catch (ChangePassportPersistenceException exception) {
             throw exception;
         } catch (RuntimeException | java.io.IOException exception) {
@@ -200,6 +220,12 @@ public final class PassportReceiptJsonCodec {
                 text(node, "threadIdentityHash"), text(node, "codexVersion"),
                 integer(node, "selectedFileCount"), integer(node, "matchedFileCount"), paths,
                 Instant.parse(text(node, "capturedAt")));
+    }
+
+    private static EvidenceCoverageSummary coverage(JsonNode node) {
+        requireObject(node, COVERAGE_FIELDS);
+        return new EvidenceCoverageSummary(integer(node, "totalHunks"),
+                integer(node, "measurableHunks"), integer(node, "referencedHunks"));
     }
 
     private static String decodeUtf8(byte[] bytes) throws CharacterCodingException {

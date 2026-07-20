@@ -33,6 +33,7 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
     private final ChangePassportPaths paths;
     private final MarkdownChangePassportRenderer renderer;
     private final PassportReceiptJsonCodec receiptCodec;
+    private final EvidenceCoverageSidecarCodec coverageCodec = new EvidenceCoverageSidecarCodec();
     private final Clock clock;
     private final Supplier<String> receiptIdGenerator;
     private final MoveOperation mover;
@@ -77,7 +78,8 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
                 initialReceipt.skippedPrimaryCount(), initialReceipt.model(),
                 new dev.codedefense.domain.PassportAttemptId(receiptId),
                 java.util.Optional.of(value.receipt().attemptId()), value.receipt().attemptNumber() + 1,
-                initialReceipt.focus(), initialReceipt.codexProvenance())).orElse(initialReceipt);
+                initialReceipt.focus(), initialReceipt.codexProvenance(),
+                initialReceipt.evidenceCoverage())).orElse(initialReceipt);
         byte[] receiptData = receiptCodec.encode(receipt);
         Path artifactTemp = null, receiptTemp = null, pointerTemp = null, destination = null,
                 receiptDestination = null;
@@ -101,6 +103,10 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
             pointerTemp = Files.createTempFile(paths.rootDirectory(), ".latest-passport-", ".tmp");
             Files.write(pointerTemp, pointer, StandardOpenOption.TRUNCATE_EXISTING);
             move(pointerTemp, paths.latestPointer(), true); pointerTemp = null;
+            if (passport.evidenceCoverage().isPresent()) {
+                writeCoverageBestEffort(new StoredEvidenceCoverage(receipt.receiptId(),
+                        passport.evidenceCoverage().orElseThrow()), destination);
+            }
             return destination.toAbsolutePath().normalize();
         } catch (IOException | RuntimeException exception) {
             delete(artifactTemp);
@@ -126,6 +132,27 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
             return Optional.of(stored(markdown, receipt));
         } catch (IOException | RuntimeException exception) {
             throw ChangePassportPersistenceException.readFailure();
+        }
+    }
+
+    @Override public Optional<StoredEvidenceCoverage> readLatestCoverage() {
+        try {
+            Optional<StoredChangePassport> latest = readLatest();
+            if (latest.isEmpty()) return Optional.empty();
+            StoredChangePassport passport = latest.orElseThrow();
+            Path path = coverageSidecar(passport.markdownPath());
+            if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(path)
+                    || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
+            validateContainedArtifact(path);
+            StoredEvidenceCoverage coverage = coverageCodec.decode(bounded(path,
+                    EvidenceCoverageSidecarCodec.MAXIMUM_BYTES));
+            if (!coverage.receiptId().equals(passport.receipt().receiptId())
+                    || !coverage.coverage().diffFingerprint().equals(passport.receipt().diffFingerprint())) {
+                return Optional.empty();
+            }
+            return Optional.of(coverage);
+        } catch (RuntimeException | IOException exception) {
+            return Optional.empty();
         }
     }
 
@@ -159,7 +186,8 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
             directory(paths.passportsDirectory());
             try (var stream = Files.list(paths.passportsDirectory())) {
                 List<Path> receipts = stream
-                        .filter(path -> path.getFileName().toString().endsWith(".json"))
+                        .filter(path -> path.getFileName().toString()
+                                .matches(".+-change-passport(?:-\\d+)?\\.json"))
                         .sorted(Comparator.comparing(FileSystemChangePassportStore::receiptTimeKey)
                                 .thenComparingInt(FileSystemChangePassportStore::receiptOrdinal).reversed())
                         .toList();
@@ -233,6 +261,24 @@ public final class FileSystemChangePassportStore implements ChangePassportStore 
     private static Path sidecar(Path markdown) {
         String name = markdown.getFileName().toString();
         return markdown.resolveSibling(name.substring(0, name.length() - 2) + "json").normalize();
+    }
+    private static Path coverageSidecar(Path markdown) {
+        String name = markdown.getFileName().toString();
+        return markdown.resolveSibling(name.substring(0, name.length() - 3) + ".coverage.json").normalize();
+    }
+    private void writeCoverageBestEffort(StoredEvidenceCoverage coverage, Path markdown) {
+        Path temp = null;
+        Path destination = coverageSidecar(markdown);
+        try {
+            byte[] bytes = coverageCodec.encode(coverage);
+            temp = Files.createTempFile(paths.passportsDirectory(), ".coverage-", ".tmp");
+            Files.write(temp, bytes, StandardOpenOption.TRUNCATE_EXISTING);
+            move(temp, destination, false);
+            temp = null;
+        } catch (RuntimeException | IOException exception) {
+            delete(temp);
+            delete(destination);
+        }
     }
     private static Path markdown(Path receipt) {
         String name = receipt.getFileName().toString();

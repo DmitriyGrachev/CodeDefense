@@ -10,6 +10,7 @@ public interface ChangePassportStore {
     Path save(ChangePassport passport);
     Optional<StoredPassportIdentity> readLatestIdentity();
     default Optional<StoredChangePassport> readLatest() { return Optional.empty(); }
+    default Optional<StoredEvidenceCoverage> readLatestCoverage() { return Optional.empty(); }
     default List<StoredChangePassport> list(int limit) { return List.of(); }
     default List<StoredChangePassport> listByRepository(String repositoryIdentityHash, int limit) {
         if (repositoryIdentityHash == null || !repositoryIdentityHash.matches("[0-9a-f]{64}")) {

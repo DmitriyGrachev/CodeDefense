@@ -119,6 +119,7 @@ class SwingCodeDefenseToolWindowViewTest {
         JPanel selectors = named(view.component(), JPanel.class, "codeDefense.defenseSelectors");
         JPanel session = named(view.component(), JPanel.class, "codeDefense.sessionArea");
         JPanel evidence = named(view.component(), JPanel.class, "codeDefense.evidenceSection");
+        JPanel coverage = named(view.component(), JPanel.class, "codeDefense.evidenceCoverage");
         JPanel radar = named(view.component(), JPanel.class, "codeDefense.learningRadar");
         JPanel body = named(view.component(), JPanel.class, "codeDefense.cockpitBody");
         JPanel confirmation = named(view.component(), JPanel.class, "codeDefense.confirmationActions");
@@ -128,16 +129,18 @@ class SwingCodeDefenseToolWindowViewTest {
         assertTrue(SwingUtilities.isDescendingFrom(evidence, session));
         assertTrue(SwingUtilities.isDescendingFrom(confirmation, session));
         assertSame(body, session.getParent());
-        assertSame(body, radar.getParent());
+        assertSame(coverage.getParent(), radar.getParent());
+        assertSame(body, coverage.getParent().getParent());
         BorderLayout bodyLayout = (BorderLayout) body.getLayout();
         assertEquals(BorderLayout.CENTER, bodyLayout.getConstraints(session));
-        assertEquals(BorderLayout.SOUTH, bodyLayout.getConstraints(radar));
+        assertEquals(BorderLayout.SOUTH, bodyLayout.getConstraints(coverage.getParent()));
         assertEquals("CodeDefense live staged Passport gate",
                 gate.getAccessibleContext().getAccessibleName());
         assertEquals("CodeDefense defense session",
                 session.getAccessibleContext().getAccessibleName());
         assertEquals("Evidence for the current question",
                 evidence.getAccessibleContext().getAccessibleName());
+        assertEquals("Evidence Coverage", coverage.getAccessibleContext().getAccessibleName());
         assertEquals("One-shot source confirmation",
                 confirmation.getAccessibleContext().getAccessibleName());
     }

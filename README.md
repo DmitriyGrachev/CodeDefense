@@ -164,6 +164,30 @@ CodeDefense selects at most 30 files and limits the snapshot to 120 KiB. It prev
 
 On Windows, CodeDefense never directly launches `codex.cmd` or the extensionless npm Unix shim, and it does not use `cmd.exe /c` or PowerShell `-Command`.
 
+## Codex plugin, skill, and advisory Stop hook
+
+Iteration 8.17 packages CodeDefense as a repository-local Codex plugin. The bundled skill can show the staged Passport status, run a source-free staged preview, display the latest Passport score card, or summarize the repository Learning Radar. It never answers defense questions or starts a source-sending defense automatically. Actual defenses remain explicit, interactive workflows in the CodeDefense IntelliJ Tool Window or CLI.
+
+The advisory `Stop` hook checks only the staged Change Passport identity after a Codex turn. It is silent outside a Git repository and when no staged change exists. Otherwise it reports `UNDEFENDED`, `CURRENT`, `EXPIRED`, or `UNAVAILABLE` with a safe next action. These states are educational signals only: they are never approval to merge or deploy. The hook launches the local CodeDefense metadata adapter, never launches `codex exec`, consumes no Codex credits, and emits no source, diff hunks, paths, project names, answers, questions, feedback, scores, readiness, model output, credentials, or user identity.
+
+Build the executable and self-contained plugin archive on Windows:
+
+```powershell
+mvn package
+.\scripts\package-codex-plugin.ps1
+```
+
+The archive is written to `target/codedefense-codex-plugin.zip`. The repository-local marketplace manifest is `.agents/plugins/marketplace.json`; add that marketplace in Codex, install **CodeDefense**, restart Codex, and review/enable the hook through `/hooks`. Java 21 is resolved from `JAVA_HOME` first and then `PATH`. Disable or uninstall the plugin from the Codex plugin UI to remove the skill and hook.
+
+Linux and macOS use:
+
+```sh
+mvn package
+./scripts/package-codex-plugin.sh
+```
+
+The bundled POSIX launcher contract is covered offline, but actual launcher acceptance on macOS/Linux remains pending; Windows packaging and launcher execution are verified locally. Hook trust is always controlled by Codex and is never bypassed by CodeDefense.
+
 ## IntelliJ IDEA plugin
 
 Iteration 8.11 adds a Windows-first CodeDefense Tool Window for IntelliJ IDEA 2026.1 Community and Ultimate modes. The plugin is a passive adapter: it launches the bundled shaded CLI JAR as a child Java process and exchanges bounded, versioned NDJSON over stdin/stdout. Git capture, privacy filtering, Codex access, question generation, scoring, and Passport persistence remain in the CLI. The plugin does not read project source, run Git itself, parse Passport Markdown, or place answers and model text in IDE logs or settings.

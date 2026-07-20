@@ -27,3 +27,6 @@ dist/
 # Operating system
 .DS_Store
 Thumbs.db
+
+# Generated Codex plugin payload
+plugins/codedefense/cli/codedefense.jar

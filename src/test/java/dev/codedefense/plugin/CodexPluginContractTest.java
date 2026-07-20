@@ -100,6 +100,28 @@ class CodexPluginContractTest {
         assertTrue(Files.isRegularFile(PLUGIN.resolve("cli/.gitkeep")));
     }
 
+    @Test
+    void packagingScriptsCreateOneIgnoredSelfContainedArchive() throws Exception {
+        Path powerShellPath = ROOT.resolve("scripts/package-codex-plugin.ps1");
+        Path posixPath = ROOT.resolve("scripts/package-codex-plugin.sh");
+        assertTrue(Files.isRegularFile(powerShellPath));
+        assertTrue(Files.isRegularFile(posixPath));
+        String powerShell = Files.readString(powerShellPath, StandardCharsets.UTF_8);
+        String posix = Files.readString(posixPath, StandardCharsets.UTF_8);
+
+        for (String script : List.of(powerShell, posix)) {
+            assertTrue(script.contains("target/codedefense.jar")
+                    || script.contains("target\\codedefense.jar"));
+            assertTrue(script.contains("codedefense-codex-plugin.zip"));
+            assertTrue(script.contains("plugins/codedefense")
+                    || script.contains("plugins\\codedefense"));
+        }
+        assertFalse(powerShell.contains("Invoke-Expression"));
+        assertFalse(posix.contains("eval"));
+        assertTrue(Files.readString(ROOT.resolve(".gitignore"), StandardCharsets.UTF_8)
+                .contains("plugins/codedefense/cli/codedefense.jar"));
+    }
+
     private static JsonNode json(Path path) throws IOException {
         return JSON.readTree(Files.readAllBytes(path));
     }

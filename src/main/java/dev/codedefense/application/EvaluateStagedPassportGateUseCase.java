@@ -15,7 +15,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
-public final class EvaluateStagedPassportGateUseCase {
+public final class EvaluateStagedPassportGateUseCase implements StagedPassportGateEvaluator {
     private static final int PROTOCOL_VERSION = 1;
     private static final int HISTORY_LIMIT = 50;
     private static final int PATH_LIMIT = 30;
@@ -27,6 +27,7 @@ public final class EvaluateStagedPassportGateUseCase {
         this.store = Objects.requireNonNull(store, "store");
     }
 
+    @Override
     public StagedPassportGateResult evaluate(Path repository) {
         Objects.requireNonNull(repository, "repository");
         StagedChange change;

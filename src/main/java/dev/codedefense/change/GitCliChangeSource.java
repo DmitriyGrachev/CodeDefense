@@ -5,6 +5,7 @@ import dev.codedefense.ai.ProcessResult;
 import dev.codedefense.ai.ProcessSpec;
 import dev.codedefense.domain.ChangeKind;
 import dev.codedefense.domain.ChangeSelector;
+import dev.codedefense.domain.CommitSelector;
 import dev.codedefense.domain.GitChange;
 import dev.codedefense.domain.GitChangeIdentity;
 import dev.codedefense.domain.StagedChange;
@@ -51,6 +52,14 @@ public final class GitCliChangeSource implements GitChangeSource {
                     identity.diffFingerprint());
         }
         return capture(requestedPath, selector).change().identity();
+    }
+
+    /** Returns the staged-format fingerprint for the immutable parent-to-commit diff. */
+    public String capturePassportFingerprint(Path requestedPath, CommitSelector selector) {
+        ResolvedChangeSelector resolved = resolver.resolve(requestedPath, Objects.requireNonNull(selector, "selector"));
+        ProcessExecutor immutableDiffExecutor = new ImmutableDiffExecutor(executor, resolved);
+        return new GitCliStagedChangeSource(immutableDiffExecutor)
+                .captureIdentity(resolved.repositoryRoot()).diffFingerprint();
     }
 
     private static CapturedGitChange translate(CapturedStagedChange captured, ChangeKind kind, String target) {

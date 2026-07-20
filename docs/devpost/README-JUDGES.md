@@ -19,8 +19,7 @@ java -jar .\codedefense.jar sample --dry-run
 ```
 
 Expected: successful version/help output and a bounded sample preview ending
-with `No source content was sent.`, `No model request was made.`, and
-`Codex was not invoked.`
+with `No source content was sent.` and `Codex was not invoked.`
 
 ## Full staged-change defense
 

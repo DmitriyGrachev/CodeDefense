@@ -44,11 +44,14 @@ class CodeDefenseToolWindowFactoryTest {
     @Test
     void eventSignalsRefreshForProjectWindowGitIndexAndActivationButNotSourceFiles() {
         int[] refreshes = {0};
-        var signals = new CodeDefenseToolWindowFactory.RefreshSignals(directory, () -> refreshes[0]++);
+        int[] insightRefreshes = {0};
+        var signals = new CodeDefenseToolWindowFactory.RefreshSignals(directory,
+                () -> refreshes[0]++, () -> insightRefreshes[0]++);
 
         signals.projectOpened();
         signals.toolWindowShown("Other");
         signals.toolWindowShown("CodeDefense");
+        assertEquals(1, insightRefreshes[0]);
         signals.gitRepositoryChanged(false);
         signals.gitRepositoryChanged(true);
         signals.vfsBatch(List.of(directory.resolve("src/Main.java").toString()));
@@ -58,6 +61,10 @@ class CodeDefenseToolWindowFactoryTest {
         signals.applicationActivated(false);
         signals.applicationActivated(true);
         assertEquals(5, refreshes[0]);
+        assertEquals(1, insightRefreshes[0]);
+        signals.manualRefresh();
+        assertEquals(6, refreshes[0]);
+        assertEquals(2, insightRefreshes[0]);
         assertFalse(CodeDefenseToolWindowFactory.isIndexRelevant(directory,
                 directory.resolve(".git/refs/heads/main").toString()));
         assertTrue(CodeDefenseToolWindowFactory.isIndexRelevant(directory,

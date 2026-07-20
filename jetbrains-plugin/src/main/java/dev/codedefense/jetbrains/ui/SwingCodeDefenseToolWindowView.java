@@ -4,6 +4,8 @@ import dev.codedefense.jetbrains.process.CodeDefenseLauncher.Selector;
 import dev.codedefense.jetbrains.gate.StagedGateView;
 import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
 import dev.codedefense.jetbrains.process.EvidenceLocationView;
+import dev.codedefense.jetbrains.insights.LearningRadarPanel;
+import dev.codedefense.jetbrains.insights.RepositoryInsightsView;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
@@ -43,6 +45,7 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     private final JButton decline = new JButton("Decline");
     private final JTextArea output = new JTextArea();
     private final JPanel evidencePanel = new JPanel();
+    private final LearningRadarPanel learningRadar = new LearningRadarPanel();
     private final JTextField answer = new JTextField();
     private final JButton submit = new JButton("Answer");
     private final JButton skip = new JButton("Skip");
@@ -84,7 +87,8 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         provenanceControls.setVisible("true".equalsIgnoreCase(
                 System.getenv("CODEDEFENSE_EXPERIMENTAL_CODEX_PROVENANCE")));
         JPanel north = new JPanel(); north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
-        north.add(gate); north.add(selectors); north.add(actions); north.add(provenanceControls);
+        north.add(gate); north.add(learningRadar); north.add(selectors); north.add(actions);
+        north.add(provenanceControls);
         root.add(north, BorderLayout.NORTH);
         JPanel center = new JPanel(new BorderLayout(4, 4));
         center.add(new JScrollPane(output), BorderLayout.CENTER);
@@ -201,6 +205,10 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         evidencePanel.revalidate();
         evidencePanel.repaint();
     }
+    @Override public void showRepositoryInsights(RepositoryInsightsView value) {
+        learningRadar.showInsights(value);
+    }
+    @Override public void showRepositoryInsightsUnavailable() { learningRadar.showUnavailable(); }
 
     private String counts(StagedGateView value) {
         return value.stagedFileCount() + " staged files | +" + value.addedLines()

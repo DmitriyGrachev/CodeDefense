@@ -277,6 +277,30 @@ class FileSystemChangePassportStoreTest {
     }
 
     @Test
+    void repositoryQueryReturnsItsNewestTwentyEvenAfterMoreThanFiftyOtherReceipts() {
+        ChangePassportPaths paths = ChangePassportPaths.under(directory);
+        java.util.concurrent.atomic.AtomicInteger ids = new java.util.concurrent.atomic.AtomicInteger();
+        FileSystemChangePassportStore store = new FileSystemChangePassportStore(paths,
+                new MarkdownChangePassportRenderer(), new PassportReceiptJsonCodec(),
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                () -> "20000000-0000-4000-8000-%012d".formatted(ids.incrementAndGet()));
+        for (int index = 0; index < 21; index++) {
+            store.save(passportWithRepository("a".repeat(64)));
+        }
+        for (int index = 0; index < 51; index++) {
+            store.save(passportWithRepository("e".repeat(64)));
+        }
+
+        List<StoredChangePassport> result = store.listByRepository("a".repeat(64), 20);
+
+        assertEquals(20, result.size());
+        assertTrue(result.stream().allMatch(value ->
+                value.receipt().repositoryIdentityHash().equals("a".repeat(64))));
+        assertEquals(21, result.getFirst().receipt().attemptNumber());
+        assertEquals(2, result.getLast().receipt().attemptNumber());
+    }
+
+    @Test
     void repositoryAndKindQueryFiltersSameRepositoryCommitsBeforeApplyingTheLimit() {
         ChangePassportPaths paths = ChangePassportPaths.under(directory);
         java.util.concurrent.atomic.AtomicInteger ids = new java.util.concurrent.atomic.AtomicInteger();

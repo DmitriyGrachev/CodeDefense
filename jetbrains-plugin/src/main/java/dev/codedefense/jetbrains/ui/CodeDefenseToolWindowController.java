@@ -6,6 +6,7 @@ import dev.codedefense.jetbrains.process.BridgeLineCodec.BridgeMessage;
 import dev.codedefense.jetbrains.process.CodeDefenseLauncher.BridgeLaunchSpec;
 import dev.codedefense.jetbrains.process.CodeDefenseLauncher.Selector;
 import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
+import dev.codedefense.jetbrains.insights.RepositoryInsightsView;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -34,6 +35,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
 
     interface StatusLoader { dev.codedefense.jetbrains.status.PassportStatusView load(); }
     interface PassportOpener { void open(Path path); }
+    interface InsightsLoader { RepositoryInsightsView load(); }
 
     private final CodeDefenseToolWindowView view;
     private final SessionLauncher launcher;
@@ -44,9 +46,11 @@ public final class CodeDefenseToolWindowController implements Disposable {
     private final PassportOpener passportOpener;
     private final Runnable gateRefresh;
     private final EvidenceNavigator evidenceNavigator;
+    private final InsightsLoader insightsLoader;
     private final ScheduledExecutorService debounce = Executors.newSingleThreadScheduledExecutor(
             Thread.ofVirtual().name("codedefense-status-refresh").factory());
     private final AtomicLong refreshGeneration = new AtomicLong();
+    private final AtomicLong insightsGeneration = new AtomicLong();
     private final Object lock = new Object();
     private long sessionGeneration;
     private volatile Session activeSession;
@@ -85,6 +89,14 @@ public final class CodeDefenseToolWindowController implements Disposable {
             BridgeLineCodec codec, Consumer<Runnable> edt, Executor background,
             StatusLoader statusLoader, PassportOpener passportOpener, Runnable gateRefresh,
             EvidenceNavigator evidenceNavigator) {
+        this(view, launcher, codec, edt, background, statusLoader, passportOpener, gateRefresh,
+                evidenceNavigator, null);
+    }
+
+    CodeDefenseToolWindowController(CodeDefenseToolWindowView view, SessionLauncher launcher,
+            BridgeLineCodec codec, Consumer<Runnable> edt, Executor background,
+            StatusLoader statusLoader, PassportOpener passportOpener, Runnable gateRefresh,
+            EvidenceNavigator evidenceNavigator, InsightsLoader insightsLoader) {
         this.view = Objects.requireNonNull(view, "view");
         this.launcher = Objects.requireNonNull(launcher, "launcher");
         this.codec = Objects.requireNonNull(codec, "codec");
@@ -94,6 +106,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
         this.passportOpener = passportOpener;
         this.gateRefresh = Objects.requireNonNull(gateRefresh, "gateRefresh");
         this.evidenceNavigator = Objects.requireNonNull(evidenceNavigator, "evidenceNavigator");
+        this.insightsLoader = insightsLoader;
     }
 
     public void preview(Selector selector, String selectorValue, String focus) {
@@ -353,6 +366,26 @@ public final class CodeDefenseToolWindowController implements Disposable {
     public void refresh() {
         gateRefresh.run();
         refreshPassportStatus();
+        refreshInsights();
+    }
+
+    void initialize(boolean toolWindowVisible) {
+        gateRefresh.run();
+        refreshPassportStatus();
+        if (toolWindowVisible) refreshInsights();
+    }
+
+    public void refreshInsights() {
+        if (insightsLoader == null) return;
+        long generation = insightsGeneration.incrementAndGet();
+        background.execute(() -> {
+            try {
+                RepositoryInsightsView insights = insightsLoader.load();
+                uiInsightsCurrent(generation, () -> view.showRepositoryInsights(insights));
+            } catch (RuntimeException exception) {
+                uiInsightsCurrent(generation, view::showRepositoryInsightsUnavailable);
+            }
+        });
     }
 
     private void refreshPassportStatus() {
@@ -369,6 +402,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
 
     public void scheduleRefresh() {
         gateRefresh.run();
+        refreshInsights();
         long generation = refreshGeneration.incrementAndGet();
         debounce.schedule(() -> {
             if (refreshGeneration.get() == generation) refreshPassportStatus();
@@ -411,6 +445,13 @@ public final class CodeDefenseToolWindowController implements Disposable {
         });
     }
 
+    private void uiInsightsCurrent(long generation, Runnable action) {
+        ui(() -> {
+            if (insightsGeneration.get() != generation) return;
+            action.run();
+        });
+    }
+
     private static String safe(String value) {
         if (value == null) {
             return "";
@@ -431,6 +472,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
 
     @Override
     public void dispose() {
+        insightsGeneration.incrementAndGet();
         cancel();
         debounce.shutdownNow();
     }

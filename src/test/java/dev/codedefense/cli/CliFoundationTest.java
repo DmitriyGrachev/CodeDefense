@@ -67,6 +67,17 @@ class CliFoundationTest {
     }
 
     @Test
+    void passportHelpRegistersRepositoryLearningInsightsWithoutRunningIt() {
+        CommandLine commandLine = CodeDefenseApplication.createCommandLine();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        commandLine.setOut(new PrintWriter(output, true, StandardCharsets.UTF_8));
+
+        assertEquals(ExitCodes.SUCCESS, commandLine.execute("passport", "--help"));
+
+        assertTrue(output.toString(StandardCharsets.UTF_8).contains("insights"));
+    }
+
+    @Test
     void invalidOptionReturnsInvalidUsageExitCode() {
         assertEquals(ExitCodes.INVALID_USAGE, CodeDefenseApplication.createCommandLine().execute("--unknown"));
     }

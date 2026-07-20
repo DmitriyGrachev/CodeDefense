@@ -32,7 +32,7 @@
 **Interfaces:**
 - Produces immutable domain values consumed by application/JSON layers.
 
-- [ ] **Step 1: Write RED invariant tests**
+- [x] **Step 1: Write RED invariant tests**
 
 Use exact records:
 
@@ -51,13 +51,13 @@ public record RepositoryLearningInsights(
 
 Require schema version 1; counts 0–20; `defendedChangeCount <= attemptCount`; category order exactly `decision`, `counterfactual`, `test-prediction`; scores 0–100; recent list 0–10; empty history uses empty strongest/practice strings; nonempty history uses valid category IDs. Lists are defensive copies. `toString()` exposes counts only.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 mvn -Dtest=RepositoryLearningInsightsTest test
 ```
 
-- [ ] **Step 3: Implement records and run GREEN**
+- [x] **Step 3: Implement records and run GREEN**
 
 Implement explicit compact constructors and rerun the focused test.
 
@@ -74,7 +74,7 @@ Implement explicit compact constructors and rerun the focused test.
 - Consumes: `StagedChangeSource.captureIdentity(Path)` and `ChangePassportStore.listByRepository(repositoryHash, limit)`.
 - Produces: `RepositoryLearningInsights build(Path repository, int limit)`.
 
-- [ ] **Step 1: Write RED aggregation tests**
+- [x] **Step 1: Write RED aggregation tests**
 
 Cover:
 
@@ -92,17 +92,17 @@ Cover:
 - recent trend contains at most the newest 10 in chronological order;
 - corrupt store and invalid repository map to typed local failure without raw path leakage.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 mvn -Dtest=BuildRepositoryLearningInsightsUseCaseTest test
 ```
 
-- [ ] **Step 3: Implement one-pass bounded aggregation**
+- [x] **Step 3: Implement one-pass bounded aggregation**
 
 Resolve repository hash through `captureIdentity` even when `hasStagedChanges()` is false. Query by repository before limiting. Traverse the selected receipts once, maintaining three integer sums, a `HashSet<String>` of full fingerprints, and a bounded chronological score list. Never inspect Markdown.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run the same focused command.
 
@@ -119,7 +119,7 @@ Run the same focused command.
 **Interfaces:**
 - Produces: `codedefense passport insights [PATH] --format json --limit 20`.
 
-- [ ] **Step 1: Write golden JSON and CLI tests**
+- [x] **Step 1: Write golden JSON and CLI tests**
 
 Assert exact deterministic shape:
 
@@ -129,17 +129,17 @@ Assert exact deterministic shape:
 
 Assert `--limit` accepts 1–20, `--format` accepts only json, help touches no Git/store, output is newline terminated and below 256 KiB, and forbidden marker strings never appear.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 mvn -Dtest=RepositoryLearningInsightsJsonCodecTest,PassportInsightsCommandTest,CliFoundationTest test
 ```
 
-- [ ] **Step 3: Implement codec/command and production wiring**
+- [x] **Step 3: Implement codec/command and production wiring**
 
 Wire `GitCliStagedChangeSource`, `JdkProcessExecutor`, the existing file store, and the use case. Use Picocli's writer and safe documented exit codes. Do not construct runtime/Codex objects.
 
-- [ ] **Step 4: Run GREEN and package help**
+- [x] **Step 4: Run GREEN and package help**
 
 ```powershell
 mvn -Dtest=RepositoryLearningInsightsJsonCodecTest,PassportInsightsCommandTest,CliFoundationTest test
@@ -158,7 +158,7 @@ java -jar target/codedefense.jar passport insights --help
 **Interfaces:**
 - Produces: `RepositoryInsightsView refresh(Path projectRoot)`.
 
-- [ ] **Step 1: Write strict decoder/process tests**
+- [x] **Step 1: Write strict decoder/process tests**
 
 Assert exact command tokens:
 
@@ -168,11 +168,11 @@ Assert exact command tokens:
 
 Reject duplicate/unknown/missing fields, trailing JSON, malformed UTF-8, score/count/order violations, oversized stdout, timeout, nonzero exit, and secret environment inheritance. Exception messages contain no child output or root path.
 
-- [ ] **Step 2: Implement bounded service**
+- [x] **Step 2: Implement bounded service**
 
 Use the same process safety as the gate service: explicit minimal Git-capable environment allowlist (`PATH`, `SystemRoot`/`WINDIR`, and `PATHEXT` when present), exact working directory, 15-second timeout, concurrent drain, 256-KiB stdout, discarded bounded stderr, and process-tree cleanup. Do not inherit arbitrary secret variables.
 
-- [ ] **Step 3: Run focused plugin tests**
+- [x] **Step 3: Run focused plugin tests**
 
 ```powershell
 cd jetbrains-plugin
@@ -193,7 +193,7 @@ cd jetbrains-plugin
 - Consumes: `RepositoryInsightsView`.
 - Produces: accessible labeled bars and recent-score text.
 
-- [ ] **Step 1: Write RED rendering/refresh tests**
+- [x] **Step 1: Write RED rendering/refresh tests**
 
 Assert:
 
@@ -207,11 +207,11 @@ Assert:
 - ordinary VFS/Git status updates do not invoke insights;
 - no answer/question/feedback/path markers are rendered.
 
-- [ ] **Step 2: Implement panel and refresh coordination**
+- [x] **Step 2: Implement panel and refresh coordination**
 
 Use standard Swing `JProgressBar` with text visible for the three categories and a label for recent scores. Do not create custom chart dependencies. Load insights on a background executor, discard stale generations, and marshal UI updates onto EDT.
 
-- [ ] **Step 3: Run plugin tests/build**
+- [x] **Step 3: Run plugin tests/build**
 
 ```powershell
 .\gradlew.bat clean test buildPlugin --rerun-tasks --console=plain
@@ -224,7 +224,7 @@ Use standard Swing `JProgressBar` with text visible for the three categories and
 - Modify: `docs/implementation-checklist.md`
 - Modify: this plan's checked evidence
 
-- [ ] **Step 1: Run full offline verification**
+- [x] **Step 1: Run full offline verification commands**
 
 ```powershell
 mvn clean verify
@@ -235,13 +235,15 @@ cd jetbrains-plugin
 .\gradlew.bat clean test buildPlugin --rerun-tasks --console=plain
 ```
 
-Run Plugin Verifier for exact 261 and 262. Inspect fixture JSON and Tool Window text for source, answer, feedback, evidence, absolute path, user, and model markers; all must be absent.
+- [ ] **Step 2: Run Plugin Verifier and installed-plugin acceptance**
 
-- [ ] **Step 2: Run disposable receipt acceptance**
+Run Plugin Verifier for exact 261 and 262, then perform the separate installed-plugin acceptance. Inspect fixture JSON and Tool Window text for source, answer, feedback, evidence, absolute path, user, and model markers; all must be absent.
+
+- [x] **Step 3: Run disposable receipt acceptance**
 
 Create three source-free receipt fixtures with overall scores 33, 61, and 84. Confirm exact category averages, chronological trend, current-repository filtering, exit code 0, and no Codex process.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```powershell
 git add README.md docs/implementation-checklist.md docs/superpowers/plans/2026-07-19-iteration-08-15-repository-learning-radar.md src jetbrains-plugin
@@ -249,3 +251,15 @@ git commit -m "feat: add repository learning radar"
 ```
 
 Do not begin Iteration 8.16 until this commit is green.
+
+## Offline verification evidence (2026-07-20)
+
+- `mvn clean verify`: 564 tests, 0 failures, 0 errors, 4 skips; build successful.
+- `mvn package`: build successful.
+- `java -jar target/codedefense.jar passport insights --help`: exit code 0.
+- `jetbrains-plugin\\gradlew.bat clean test buildPlugin --rerun-tasks --console=plain`: 140 tests,
+  0 failures, 0 errors, 4 skips; plugin package built successfully.
+- Disposable local receipt acceptance returned bounded source-free insights JSON with exit code 0 and
+  no Codex invocation.
+- Exact Plugin Verifier and installed-plugin acceptance remain pending; Iteration 8.15 therefore
+  remains unchecked in the implementation checklist.

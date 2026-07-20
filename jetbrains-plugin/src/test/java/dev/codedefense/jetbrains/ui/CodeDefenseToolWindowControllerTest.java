@@ -10,6 +10,8 @@ import dev.codedefense.jetbrains.process.CodeDefenseLauncher.BridgeLaunchSpec;
 import dev.codedefense.jetbrains.process.CodeDefenseLauncher.Selector;
 import dev.codedefense.jetbrains.process.EvidenceLocationView;
 import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
+import dev.codedefense.jetbrains.insights.CategoryInsightView;
+import dev.codedefense.jetbrains.insights.RepositoryInsightsView;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -316,6 +318,92 @@ class CodeDefenseToolWindowControllerTest {
         assertEquals(2, gateRefreshes[0]);
     }
 
+    @Test
+    void manualRefreshAndPassportSavedRefreshInsightsButOrdinaryGateRefreshDoesNot() {
+        FakeView view = new FakeView();
+        FakeLauncher launcher = new FakeLauncher();
+        int[] gateRefreshes = {0};
+        int[] insightLoads = {0};
+        var controller = new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(),
+                Runnable::run, Runnable::run, null, null, () -> gateRefreshes[0]++, location ->
+                        new EvidenceNavigator.NavigationResult(
+                                EvidenceNavigator.NavigationStatus.OPENED, "Opened."), () -> {
+                            insightLoads[0]++;
+                            return insights(61);
+                        });
+
+        gateRefreshes[0]++;
+        assertEquals(0, insightLoads[0]);
+        controller.refresh();
+        controller.start(Selector.STAGED, null, "balanced");
+        launcher.event("{\"protocolVersion\":1,\"type\":\"passportSaved\","
+                + "\"path\":\"C:/safe/passport.md\",\"status\":\"CURRENT\","
+                + "\"shortFingerprint\":\"abc123\"}\n");
+
+        assertEquals(3, gateRefreshes[0]);
+        assertEquals(2, insightLoads[0]);
+        assertEquals(2, view.insights.size());
+    }
+
+    @Test
+    void staleInsightGenerationCannotReplaceTheNewestViewAndFailuresClearStaleScores() {
+        FakeView view = new FakeView();
+        FakeLauncher launcher = new FakeLauncher();
+        List<Runnable> background = new ArrayList<>();
+        List<Runnable> edt = new ArrayList<>();
+        int[] calls = {0};
+        var controller = new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(),
+                edt::add, background::add, null, null, () -> { }, location ->
+                        new EvidenceNavigator.NavigationResult(
+                                EvidenceNavigator.NavigationStatus.OPENED, "Opened."), () -> {
+                            int call = calls[0]++;
+                            if (call == 2) throw new IllegalStateException("PRIVATE-ROOT");
+                            return insights(call == 0 ? 33 : 84);
+                        });
+
+        controller.refreshInsights();
+        controller.refreshInsights();
+        background.get(0).run();
+        background.get(1).run();
+        edt.get(0).run();
+        edt.get(1).run();
+
+        assertEquals(1, view.insights.size());
+        assertEquals(List.of(84), view.insights.getFirst().recentOverallScores());
+
+        controller.refreshInsights();
+        background.get(2).run();
+        edt.get(2).run();
+        assertEquals(1, view.insightsUnavailable);
+    }
+
+    @Test
+    void hiddenWindowInitializationDoesNotLoadInsightsButVisibleWindowDoes() {
+        FakeView view = new FakeView();
+        int[] insightLoads = {0};
+        var controller = new CodeDefenseToolWindowController(view, new FakeLauncher(), new BridgeLineCodec(),
+                Runnable::run, Runnable::run, null, null, () -> { }, location ->
+                        new EvidenceNavigator.NavigationResult(
+                                EvidenceNavigator.NavigationStatus.OPENED, "Opened."), () -> {
+                            insightLoads[0]++;
+                            return insights(61);
+                        });
+
+        controller.initialize(false);
+        assertEquals(0, insightLoads[0]);
+
+        controller.initialize(true);
+        assertEquals(1, insightLoads[0]);
+    }
+
+    private static RepositoryInsightsView insights(int recent) {
+        return new RepositoryInsightsView(1, 1, 1, List.of(
+                new CategoryInsightView("decision", recent),
+                new CategoryInsightView("counterfactual", recent),
+                new CategoryInsightView("test-prediction", recent)),
+                "decision", "decision", List.of(recent));
+    }
+
     private CodeDefenseToolWindowController controller(FakeView view, FakeLauncher launcher) {
         return new CodeDefenseToolWindowController(view, launcher, new BridgeLineCodec(), Runnable::run);
     }
@@ -445,6 +533,8 @@ class CodeDefenseToolWindowControllerTest {
         private List<EvidenceLocationView> evidence = List.of();
         private java.util.function.Function<EvidenceLocationView, EvidenceNavigator.NavigationResult>
                 evidenceOpener;
+        private final List<RepositoryInsightsView> insights = new ArrayList<>();
+        private int insightsUnavailable;
 
         @Override public void setSessionActive(boolean value) { active = value; }
         @Override public void setConfirmationEnabled(boolean value) { confirmationEnabled = value; }
@@ -467,6 +557,8 @@ class CodeDefenseToolWindowControllerTest {
             evidenceOpener = opener;
         }
         @Override public void clearEvidence() { evidence = List.of(); evidenceOpener = null; }
+        @Override public void showRepositoryInsights(RepositoryInsightsView value) { insights.add(value); }
+        @Override public void showRepositoryInsightsUnavailable() { insightsUnavailable++; }
 
         private EvidenceNavigator.NavigationResult openEvidence(int index) {
             return evidenceOpener.apply(evidence.get(index));

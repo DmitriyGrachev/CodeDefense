@@ -99,6 +99,7 @@ java -jar target/codedefense.jar passport gate --staged --format json .
 java -jar target/codedefense.jar passport list . --limit 10
 java -jar target/codedefense.jar passport export . --format json --output passport.json
 java -jar target/codedefense.jar passport timeline .
+java -jar target/codedefense.jar passport insights . --format json --limit 20
 java -jar target/codedefense.jar passport show . --format json
 ```
 
@@ -109,6 +110,8 @@ User-supplied commit and range refs are resolved once to immutable commit IDs be
 The staged defense asks exactly three categories of question: **Decision**, **Counterfactual**, and **Test prediction**. The existing local scoring and readiness calculation apply. A completed run stores paired Markdown and versioned JSON receipt files under `<user.home>/.codedefense/change-passports/`; `<user.home>/.codedefense/latest-change-passport.txt` points to the latest Markdown artifact. The receipt is the strict machine-readable source of truth, while Markdown remains the human-readable view. Both retain only change metadata and structured verdict/score facts; model-generated questions, feedback, concepts, and user answers remain terminal-only.
 
 `passport verify .` and the compatible legacy spelling `passport --verify .` are read-only: they do not modify the working tree, Git index, Passport artifact, or latest pointer. `passport show` displays the latest source-free score card; `passport show --format json` exposes a stable local adapter boundary; `passport list` shows recent receipts; and `passport export --format json` copies the exact validated receipt without overwriting an existing file. `passport timeline` groups up to 20 complete three-category attempts by exact diff fingerprint. `prove --retry ATTEMPT_ID` verifies that identity before starting a fresh full defense. Previous artifacts are never rewritten.
+
+`passport insights . --format json --limit 20` aggregates only validated receipts for the current repository identity. It reports the three Java-owned category averages, the number of attempts and distinct defended changes, the strongest and practice-next categories, and at most ten recent overall scores in chronological order. It reads no Passport Markdown, creates no analytics database, sends no source, and never invokes Codex. Its bounded deterministic JSON omits project names, roots, timestamps, paths, questions, answers, feedback, evidence, model data, and user identity.
 
 Portable handoffs use `passport handoff create`, `inspect`, and `match`. A `.cdhandoff.json` contains at most 20 source-free attempt summaries and a SHA-256 corruption checksum. Inspect is Git-free; match is Codex-free and compares the package with a separately captured local change. Imported handoffs never enter the trusted local Passport store. Integrity means only that bytes match the checksum: it is not a signature, identity, authorship, certification, or trust claim.
 
@@ -169,6 +172,8 @@ Iteration 8.14 extends that bridge with protocol 2 evidence navigation. Primary 
 
 Evidence links are resolved against the real project root before IntelliJ sees the file. Absolute paths, parent traversal, control characters, missing or unreadable files, directories, final symlinks, intermediate symlinks, paths outside the real root, and stale line ranges are not opened. IntelliJ resolves the `VirtualFile` only after those checks and opens a valid location at its cited line without reading or displaying source through the bridge.
 
+The Tool Window also renders a repository-local Learning Radar from the source-free `passport insights` adapter: accessible bars for Decision, Counterfactual, and Test prediction, a recent overall-score trend, and a practice-next label. It loads in the background only when the Tool Window opens, after manual Refresh, or after a Passport is saved; ordinary Git/VFS gate signals do not start an insights read. Stale generations are discarded, unavailable results clear old scores, and the panel receives no source, paths, questions, answers, feedback, evidence, model data, or user identity.
+
 Build the core artifact before the isolated plugin build:
 
 ```powershell
@@ -197,6 +202,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter. Iteration 8.12 is implemented behind an off-by-default kill switch and remains unchecked until a separately authorized real-thread acceptance read. Iteration 8.13 adds the source-free live staged Passport badge and advisory IntelliJ commit check. Iteration 8.14 is implemented and offline-verified, but remains pending exact Plugin Verifier and installed-plugin acceptance. Iterations 8.15-8.16 and final Iteration 9 remain future work.
+Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter. Iteration 8.12 is implemented behind an off-by-default kill switch and remains unchecked until a separately authorized real-thread acceptance read. Iteration 8.13 adds the source-free live staged Passport badge and advisory IntelliJ commit check. Iterations 8.14 and 8.15 are implemented and offline-verified, but remain pending exact Plugin Verifier and installed-plugin acceptance. Iteration 8.16 and final Iteration 9 remain future work.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

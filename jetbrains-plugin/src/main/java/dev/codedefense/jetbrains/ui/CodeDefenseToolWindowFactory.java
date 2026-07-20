@@ -16,6 +16,7 @@ import com.intellij.openapi.wm.ex.ToolWindowManagerListener;
 import com.intellij.ui.content.ContentFactory;
 import dev.codedefense.jetbrains.gate.CodeDefenseProjectGateService;
 import dev.codedefense.jetbrains.gate.StagedGateCoordinator;
+import dev.codedefense.jetbrains.insights.RepositoryInsightsService;
 import dev.codedefense.jetbrains.evidence.IntelliJEvidenceNavigator;
 import dev.codedefense.jetbrains.process.BridgeLineCodec;
 import dev.codedefense.jetbrains.process.BridgeProcess;
@@ -43,9 +44,9 @@ public final class CodeDefenseToolWindowFactory implements ToolWindowFactory, Du
         Path cliJar = settings.resolveCliJar(bundledJar);
         CodeDefenseLauncher launcher = CodeDefenseLauncher.production(cliJar);
         PassportStatusService statusService = PassportStatusService.production(cliJar);
+        RepositoryInsightsService insightsService = RepositoryInsightsService.production(cliJar);
         CodeDefenseProjectGateService gateService = CodeDefenseProjectGateService.getInstance(project);
         Path projectRoot = Path.of(basePath);
-        RefreshSignals refreshSignals = new RefreshSignals(projectRoot, gateService::requestRefresh);
         var view = new SwingCodeDefenseToolWindowView();
         var configured = settings.getState();
         view.configureDefaults(CodeDefenseLauncher.Selector.valueOf(configured.defaultSelector),
@@ -57,8 +58,11 @@ public final class CodeDefenseToolWindowFactory implements ToolWindowFactory, Du
                 command -> Thread.ofVirtual().name("codedefense-plugin-launch").start(command),
                 () -> statusService.refresh(projectRoot),
                 path -> openPassport(project, path),
-                refreshSignals::manualRefresh,
-                new IntelliJEvidenceNavigator(project, projectRoot));
+                gateService::requestRefresh,
+                new IntelliJEvidenceNavigator(project, projectRoot),
+                () -> insightsService.refresh(projectRoot));
+        RefreshSignals refreshSignals = new RefreshSignals(projectRoot,
+                gateService::requestRefresh, controller::refreshInsights);
         view.bind(controller);
         Disposable windowDisposable = Disposer.newDisposable("CodeDefense Tool Window");
         Disposer.register(project, windowDisposable);
@@ -94,8 +98,7 @@ public final class CodeDefenseToolWindowFactory implements ToolWindowFactory, Du
         var content = ContentFactory.getInstance().createContent(view.component(), "", false);
         content.setDisposer(windowDisposable);
         toolWindow.getContentManager().addContent(content);
-        if (toolWindow.isVisible()) refreshSignals.toolWindowShown(toolWindow.getId());
-        controller.refresh();
+        controller.initialize(toolWindow.isVisible());
     }
 
     static Path bundledCliPath(URL classResource) {
@@ -129,21 +132,31 @@ public final class CodeDefenseToolWindowFactory implements ToolWindowFactory, Du
 
     static final class RefreshSignals {
         private final Path projectRoot;
-        private final Runnable refresh;
+        private final Runnable gateRefresh;
+        private final Runnable insightsRefresh;
 
-        RefreshSignals(Path projectRoot, Runnable refresh) {
+        RefreshSignals(Path projectRoot, Runnable gateRefresh, Runnable insightsRefresh) {
             this.projectRoot = Objects.requireNonNull(projectRoot, "projectRoot");
-            this.refresh = Objects.requireNonNull(refresh, "refresh");
+            this.gateRefresh = Objects.requireNonNull(gateRefresh, "gateRefresh");
+            this.insightsRefresh = Objects.requireNonNull(insightsRefresh, "insightsRefresh");
         }
 
-        void projectOpened() { refresh.run(); }
-        void toolWindowShown(String id) { if ("CodeDefense".equals(id)) refresh.run(); }
-        void gitRepositoryChanged(boolean thisProject) { if (thisProject) refresh.run(); }
-        void vfsBatch(List<String> paths) {
-            if (paths.stream().anyMatch(path -> isIndexRelevant(projectRoot, path))) refresh.run();
+        void projectOpened() { gateRefresh.run(); }
+        void toolWindowShown(String id) {
+            if ("CodeDefense".equals(id)) {
+                gateRefresh.run();
+                insightsRefresh.run();
+            }
         }
-        void applicationActivated(boolean thisProject) { if (thisProject) refresh.run(); }
-        void manualRefresh() { refresh.run(); }
+        void gitRepositoryChanged(boolean thisProject) { if (thisProject) gateRefresh.run(); }
+        void vfsBatch(List<String> paths) {
+            if (paths.stream().anyMatch(path -> isIndexRelevant(projectRoot, path))) gateRefresh.run();
+        }
+        void applicationActivated(boolean thisProject) { if (thisProject) gateRefresh.run(); }
+        void manualRefresh() {
+            gateRefresh.run();
+            insightsRefresh.run();
+        }
     }
 
     private CodeDefenseToolWindowController.Session adapt(BridgeProcess process) {

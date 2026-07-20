@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codedefense.dev/schemas/change-handoff-v1.json",
+  "title": "CodeDefense source-free Change Handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "handoffId", "createdAt", "repositoryIdentityHash",
+    "changeKind", "baseCommit", "sourceIdentity", "diffFingerprint", "attempts", "payloadSha256"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "handoffId": {"type": "string", "format": "uuid"},
+    "createdAt": {"type": "string"},
+    "repositoryIdentityHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "changeKind": {"enum": ["STAGED", "COMMIT", "RANGE"]},
+    "baseCommit": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "sourceIdentity": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "diffFingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "attempts": {"type": "array", "minItems": 1, "maxItems": 20},
+    "payloadSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

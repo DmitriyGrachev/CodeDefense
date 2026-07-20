@@ -22,7 +22,7 @@ public final class MarkdownChangePassportRenderer {
         line(markdown, "- Diff fingerprint: " + passport.change().diffFingerprint());
         line(markdown, "- Created at: " + DateTimeFormatter.ISO_INSTANT.format(passport.createdAt())); line(markdown, "");
         line(markdown, "## Status"); line(markdown, "- Status at creation: " + passport.statusAtCreation());
-        line(markdown, "- Codex session link: NOT_REQUESTED"); line(markdown, "");
+        appendProvenance(markdown, passport); line(markdown, "");
         line(markdown, "## Local assessment");
         line(markdown, "- Java-owned final score: " + passport.session().overallScore() + "/100");
         line(markdown, "- Java-owned readiness: " + MarkdownTextEscaper.inline(passport.session().readiness().displayName())); line(markdown, "");
@@ -44,6 +44,29 @@ public final class MarkdownChangePassportRenderer {
         line(markdown, "It is not approval to merge or deploy and does not claim Codex authored the change."); line(markdown, "");
         line(markdown, metadata(passport));
         return markdown.toString();
+    }
+    private static void appendProvenance(StringBuilder markdown, ChangePassport passport) {
+        if (passport.codexProvenance().isEmpty()) {
+            line(markdown, "- Experimental Codex provenance: Not requested");
+            return;
+        }
+        var provenance = passport.codexProvenance().orElseThrow();
+        line(markdown, "- Experimental Codex provenance: " + switch (provenance.status()) {
+            case EXACT_CHANGE_MATCH -> "Exact change match";
+            case PARTIAL_PATH_MATCH -> "Partial path match";
+            case NO_MATCH -> "No match";
+            case UNAVAILABLE -> "Unavailable";
+        });
+        line(markdown, "- Matched files: " + provenance.matchedFileCount() + "/"
+                + provenance.selectedFileCount());
+        if (provenance.status() != dev.codedefense.domain.CodexProvenanceStatus.UNAVAILABLE) {
+            line(markdown, "- Codex version: " + MarkdownTextEscaper.inline(provenance.codexVersion()));
+            line(markdown, "- Selected thread identity hash: " + provenance.threadIdentityHash());
+            for (String path : provenance.matchedRelativePaths()) {
+                line(markdown, "  - " + MarkdownTextEscaper.inline(path));
+            }
+        }
+        line(markdown, "- This is evidence consistency only; it does not prove authorship, causation, review quality, or safety.");
     }
     String metadata(ChangePassport passport) {
         StoredPassportIdentity identity = StoredPassportIdentity.from(passport, java.nio.file.Path.of("passport.md").toAbsolutePath());

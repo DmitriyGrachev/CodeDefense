@@ -1,0 +1,7 @@
+package dev.codedefense.passport;
+import static org.junit.jupiter.api.Assertions.*;import java.nio.file.*;import org.junit.jupiter.api.*;import org.junit.jupiter.api.io.TempDir;
+class FileSystemChangeHandoffStoreTest {@TempDir Path directory;
+ @Test void writesReadsAndRequiresExplicitOverwrite() {var store=new FileSystemChangeHandoffStore();Path output=directory.resolve("change.cdhandoff.json");byte[] data="{}\n".getBytes();assertEquals(output.toAbsolutePath(),store.write(output,data,false));assertArrayEquals(data,store.read(output));assertThrows(ChangeHandoffPersistenceException.class,()->store.write(output,data,false));assertDoesNotThrow(()->store.write(output,data,true));}
+ @Test void rejectsDirectoriesAndFinalSymlinksWhenSupported() throws Exception {var store=new FileSystemChangeHandoffStore();assertThrows(ChangeHandoffPersistenceException.class,()->store.read(directory));Path target=Files.writeString(directory.resolve("target"),"x");Path link=directory.resolve("link");try{Files.createSymbolicLink(link,target);assertThrows(ChangeHandoffPersistenceException.class,()->store.read(link));}catch(UnsupportedOperationException|java.io.IOException|SecurityException ignored){}}
+ @Test void enforcesOneMiBBound(){var store=new FileSystemChangeHandoffStore();assertThrows(ChangeHandoffPersistenceException.class,()->store.write(directory.resolve("large.cdhandoff.json"),new byte[ChangeHandoffJsonCodec.MAXIMUM_BYTES+1],false));}
+}

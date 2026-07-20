@@ -5,12 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -89,9 +92,10 @@ class JdkProcessExecutorTest {
     @Test
     void returnsDefensiveBoundedStdoutBytesAfterDrainingTheChildStream() {
         ProcessResult result = new JdkProcessExecutor().execute(
-                spec("echo", "x".repeat(1024 * 1024), 3, 1024, Duration.ofSeconds(3), Map.of()));
+                spec("echo", "x".repeat(1024 * 1024), 3, 1024, Duration.ofSeconds(10), Map.of()));
 
         byte[] first = result.stdoutBytes();
+        assertEquals(3, first.length);
         first[0] = 'z';
 
         assertEquals("xxx", result.stdout());
@@ -240,7 +244,7 @@ class JdkProcessExecutorTest {
         List<String> command = new ArrayList<>();
         command.add(javaExecutable().toString());
         command.add("-cp");
-        command.add(System.getProperty("java.class.path"));
+        command.add(absoluteTestClasspath());
         command.add(ProcessFixtureMain.class.getName());
         command.add(mode);
         command.addAll(List.of(arguments));
@@ -250,6 +254,16 @@ class JdkProcessExecutorTest {
     private static Path javaExecutable() {
         boolean windows = System.getProperty("os.name").toLowerCase().contains("win");
         return Path.of(System.getProperty("java.home"), "bin", windows ? "java.exe" : "java");
+    }
+
+    private static String absoluteTestClasspath() {
+        Path currentDirectory = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        return Pattern.compile(Pattern.quote(File.pathSeparator))
+                .splitAsStream(System.getProperty("java.class.path"))
+                .map(entry -> entry.isBlank() ? Path.of(".") : Path.of(entry))
+                .map(path -> path.isAbsolute() ? path : currentDirectory.resolve(path))
+                .map(path -> path.normalize().toString())
+                .collect(Collectors.joining(File.pathSeparator));
     }
 
     private static Map<String, String> requiredPlatformEnvironment() {

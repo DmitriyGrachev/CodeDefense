@@ -16,10 +16,11 @@ class ChangePassportTest {
         ProjectAnalysis analysis = analysis("project-a");
         ChangePassport passport = new ChangePassport(change(), analysis, session("project-a", analysis), Instant.EPOCH,
                 "model", PassportStatus.CURRENT);
-        PassportVerification verification = new PassportVerification(Path.of("C:/passport.json"), PassportStatus.CURRENT);
+        Path passportPath = absolutePath("passport.json");
+        PassportVerification verification = new PassportVerification(passportPath, PassportStatus.CURRENT);
 
         assertEquals(PassportStatus.CURRENT, passport.statusAtCreation());
-        assertEquals(Path.of("C:/passport.json"), verification.passport());
+        assertEquals(passportPath, verification.passport());
         for (String sentinel : List.of("private-answer", "private-prompt", "private-feedback", "private-key-point", "private-evidence-reason")) {
             assertFalse(passport.toString().contains(sentinel));
         }
@@ -49,8 +50,12 @@ class ChangePassportTest {
     }
 
     private static StagedChange change() {
-        return new StagedChange(Path.of("C:/repository"), "a".repeat(64), "b".repeat(40), "b".repeat(64),
+        return new StagedChange(absolutePath("repository"), "a".repeat(64), "b".repeat(40), "b".repeat(64),
                 "c".repeat(64), List.of(new StagedChangeFile(Path.of("src/App.java"), StagedFileStatus.ADDED, 1, 0)), 1, 0);
+    }
+
+    private static Path absolutePath(String name) {
+        return Path.of(System.getProperty("java.io.tmpdir"), "codedefense-tests", name).toAbsolutePath().normalize();
     }
 
     private static ProjectAnalysis analysis(String projectName) {

@@ -13,6 +13,7 @@ import dev.codedefense.ai.exception.InvalidCodexResponseException;
 import dev.codedefense.domain.ProjectAnalysis;
 import dev.codedefense.domain.ProjectSnapshot;
 import dev.codedefense.domain.StagedChange;
+import dev.codedefense.domain.DefenseFocus;
 import java.util.Objects;
 
 public final class AiStagedChangeAnalyzer implements StagedChangeAnalyzer {
@@ -25,8 +26,11 @@ public final class AiStagedChangeAnalyzer implements StagedChangeAnalyzer {
         this.aiProvider=Objects.requireNonNull(aiProvider); this.promptFactory=Objects.requireNonNull(promptFactory); this.schemaLoader=Objects.requireNonNull(schemaLoader); this.validator=Objects.requireNonNull(validator); this.mapper=Objects.requireNonNull(mapper); this.config=Objects.requireNonNull(config);
     }
     @Override public ProjectAnalysis analyze(StagedChange change, ProjectSnapshot snapshot) {
+        return analyze(change, snapshot, DefenseFocus.BALANCED);
+    }
+    @Override public ProjectAnalysis analyze(StagedChange change, ProjectSnapshot snapshot, DefenseFocus focus) {
         Objects.requireNonNull(change); Objects.requireNonNull(snapshot); StructuredCodexRequest request;
-        try { request = new StructuredCodexRequest("staged-change-analysis", promptFactory.create(change, snapshot), schemaLoader.load(), config.defaultModel(), ReasoningEffort.MEDIUM, config.defaultExecutionTimeout()); }
+        try { request = new StructuredCodexRequest("staged-change-analysis", promptFactory.create(change, snapshot, focus), schemaLoader.load(), config.defaultModel(), ReasoningEffort.MEDIUM, config.defaultExecutionTimeout()); }
         catch (IllegalStateException exception) { throw new CodexExecutionException(-1, "Staged change analysis resources are unavailable."); }
         StructuredCodexResult result = aiProvider.execute(request); return validator.validate(parse(result == null ? null : result.finalJson()), snapshot);
     }

@@ -1,0 +1,23 @@
+<idea-plugin>
+    <id>dev.codedefense.jetbrains</id>
+    <name>CodeDefense</name>
+    <vendor>CodeDefense</vendor>
+    <description><![CDATA[
+        Run a bounded CodeDefense change defense and inspect local Change Passport status inside IntelliJ IDEA.
+    ]]></description>
+    <depends>com.intellij.modules.platform</depends>
+    <depends>Git4Idea</depends>
+    <idea-version since-build="261" until-build="262.*"/>
+    <resource-bundle>messages.CodeDefenseBundle</resource-bundle>
+    <extensions defaultExtensionNs="com.intellij">
+        <projectService serviceImplementation="dev.codedefense.jetbrains.gate.CodeDefenseProjectGateService"/>
+        <checkinHandlerFactory implementation="dev.codedefense.jetbrains.gate.CodeDefenseCheckinHandlerFactory"/>
+        <toolWindow id="CodeDefense"
+                    anchor="right"
+                    icon="/icons/codedefense.svg"
+                    factoryClass="dev.codedefense.jetbrains.ui.CodeDefenseToolWindowFactory"/>
+        <applicationConfigurable id="dev.codedefense.jetbrains.settings"
+                                 displayName="CodeDefense"
+                                 instance="dev.codedefense.jetbrains.settings.CodeDefenseConfigurable"/>
+    </extensions>
+</idea-plugin>

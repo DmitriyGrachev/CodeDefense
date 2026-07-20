@@ -1,0 +1,2 @@
+package dev.codedefense.cli;import java.util.concurrent.Callable;import picocli.CommandLine.Command;
+@Command(name="handoff",mixinStandardHelpOptions=true,description="Create, inspect, or match a source-free Change Handoff.",subcommands={PassportHandoffCreateCommand.class,PassportHandoffInspectCommand.class,PassportHandoffMatchCommand.class})public final class PassportHandoffCommand implements Callable<Integer>{@Override public Integer call(){return ExitCodes.INVALID_USAGE;}}

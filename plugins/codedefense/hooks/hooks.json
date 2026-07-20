@@ -1,0 +1,18 @@
+{
+  "description": "Show source-free staged CodeDefense Passport status after a Codex turn.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/scripts/codedefense-hook.sh\"",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$env:PLUGIN_ROOT\\scripts\\codedefense-hook.ps1\"",
+            "timeout": 15,
+            "statusMessage": "Checking staged CodeDefense Passport"
+          }
+        ]
+      }
+    ]
+  }
+}

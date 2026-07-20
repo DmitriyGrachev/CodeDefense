@@ -32,7 +32,7 @@ class MarkdownChangePassportRendererTest {
                 "Decision defense", "Counterfactual defense", "Test prediction", "Privacy"}) {
             assertTrue(markdown.contains("## " + heading));
         }
-        assertTrue(markdown.contains("Codex session link: NOT_REQUESTED"));
+        assertTrue(markdown.contains("Experimental Codex provenance: Not requested"));
         assertTrue(markdown.contains("Java-owned final score"));
         assertTrue(markdown.contains("src/App\\.java"));
         assertFalse(markdown.contains("private-staged-source"));
@@ -160,6 +160,27 @@ class MarkdownChangePassportRendererTest {
         assertFalse(lowerCase.contains("expected key points"));
         assertFalse(lowerCase.contains("evidence reasons"));
         assertFalse(lowerCase.contains("raw model json"));
+    }
+
+    @Test
+    void rendersOnlySourceFreeProvenanceSummaryAndHonestyBoundary() {
+        ChangePassport original = PassportTestFixtures.passport(PassportStatus.CURRENT);
+        var provenance = new dev.codedefense.domain.CodexProvenanceSummary(1,
+                dev.codedefense.domain.CodexProvenanceStatus.EXACT_CHANGE_MATCH,
+                "e".repeat(64), "0.144.0", 1, 1, List.of("src/App.java"),
+                Instant.parse("2026-07-19T12:00:00Z"));
+        ChangePassport passport = new ChangePassport(original.change(), original.changeKind(),
+                original.sourceIdentity(), original.analysis(), original.session(), original.createdAt(),
+                original.model(), original.statusAtCreation(), original.focus(), Optional.of(provenance));
+
+        String markdown = new MarkdownChangePassportRenderer().render(passport);
+
+        assertTrue(markdown.contains("Experimental Codex provenance: Exact change match"));
+        assertTrue(markdown.contains("Matched files: 1/1"));
+        assertTrue(markdown.contains("e".repeat(64)));
+        assertTrue(markdown.contains("does not prove authorship"));
+        for (String forbidden : new String[] {"private-thread-id", "PRIVATE-TRANSCRIPT",
+                "@@ -1 +1 @@", "private-answer"}) assertFalse(markdown.contains(forbidden));
     }
 
 }

@@ -1,0 +1,32 @@
+name: CodeDefense Passport
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  passport-continuity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check pull request commits
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/passport-check
+        with:
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          policy: advisory
+      - name: Check pushed commits
+        if: github.event_name == 'push'
+        uses: ./.github/actions/passport-check
+        with:
+          base: ${{ github.event.before }}
+          head: ${{ github.sha }}
+          policy: advisory

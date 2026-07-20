@@ -1,7 +1,9 @@
 package dev.codedefense.cli;
 
 import dev.codedefense.application.VerifyLatestChangePassportUseCase;
+import dev.codedefense.change.CapturedStagedChange;
 import dev.codedefense.change.GitChangeException;
+import dev.codedefense.change.StagedChangeSource;
 import dev.codedefense.domain.PassportStatus;
 import dev.codedefense.domain.PassportVerification;
 import dev.codedefense.passport.ChangePassportStore;
@@ -21,13 +23,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PassportCommandTest {
     @Test
+    void registersCommandCenterSubcommands() {
+        CommandLine commandLine = new CommandLine(new PassportCommand());
+        assertTrue(commandLine.getSubcommands().keySet().containsAll(
+                java.util.Set.of("show", "list", "verify", "export")));
+    }
+    @Test
     void verifyPrintsCurrentStatusAndExplanation() {
         AtomicInteger calls = new AtomicInteger();
         var passport = PassportTestFixtures.passport(PassportStatus.CURRENT);
-        VerifyLatestChangePassportUseCase useCase = new VerifyLatestChangePassportUseCase(path -> {
+        VerifyLatestChangePassportUseCase useCase = new VerifyLatestChangePassportUseCase(source(path -> {
             calls.incrementAndGet();
-            return new dev.codedefense.change.CapturedStagedChange(passport.change(), List.of());
-        }, storeWith(passport));
+            return new CapturedStagedChange(passport.change(), List.of());
+        }), storeWith(passport));
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         CommandLine commandLine = new CommandLine(new PassportCommand(useCase));
         commandLine.setOut(new PrintWriter(output, true, StandardCharsets.UTF_8));
@@ -41,7 +49,7 @@ class PassportCommandTest {
     @Test
     void verifyOptionIsRequired() {
         assertEquals(ExitCodes.INVALID_USAGE, new CommandLine(new PassportCommand(new VerifyLatestChangePassportUseCase(
-                path -> { throw new AssertionError(); }, emptyStore()))).execute());
+                source(path -> { throw new AssertionError(); }), emptyStore()))).execute());
     }
 
     @Test
@@ -50,10 +58,10 @@ class PassportCommandTest {
         ChangePassportStore store = storeWith(passport);
 
         assertEquals(ExitCodes.INVALID_PROJECT_PATH, new CommandLine(new PassportCommand(
-                new VerifyLatestChangePassportUseCase(path -> { throw new GitChangeException(GitChangeException.Kind.INVALID_REPOSITORY); }, store)))
+                new VerifyLatestChangePassportUseCase(source(path -> { throw new GitChangeException(GitChangeException.Kind.INVALID_REPOSITORY); }), store)))
                 .execute("--verify", "."));
         assertEquals(ExitCodes.GIT_EXECUTION_FAILED, new CommandLine(new PassportCommand(
-                new VerifyLatestChangePassportUseCase(path -> { throw new GitChangeException(GitChangeException.Kind.EXECUTION_FAILED); }, store)))
+                new VerifyLatestChangePassportUseCase(source(path -> { throw new GitChangeException(GitChangeException.Kind.EXECUTION_FAILED); }), store)))
                 .execute("--verify", "."));
     }
 
@@ -70,6 +78,13 @@ class PassportCommandTest {
             @Override public Optional<dev.codedefense.passport.StoredPassportIdentity> readLatestIdentity() {
                 return Optional.of(dev.codedefense.passport.StoredPassportIdentity.from(passport, Path.of("passport.md")));
             }
+        };
+    }
+
+    private static StagedChangeSource source(java.util.function.Function<Path, CapturedStagedChange> captures) {
+        return new StagedChangeSource() {
+            @Override public CapturedStagedChange capture(Path path) { return captures.apply(path); }
+            @Override public dev.codedefense.domain.StagedChange inspect(Path path) { return captures.apply(path).change(); }
         };
     }
 }

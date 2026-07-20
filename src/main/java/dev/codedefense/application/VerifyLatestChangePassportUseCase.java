@@ -11,10 +11,10 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** Read-only verification against a newly captured staged index. */
-public final class VerifyLatestChangePassportUseCase {
+public final class VerifyLatestChangePassportUseCase implements ChangePassportVerifier {
     private final StagedChangeSource source; private final ChangePassportStore store;
     public VerifyLatestChangePassportUseCase(StagedChangeSource source, ChangePassportStore store) { this.source=Objects.requireNonNull(source,"source"); this.store=Objects.requireNonNull(store,"store"); }
-    public Optional<PassportVerification> verify(Path repositoryPath) {
+    @Override public Optional<PassportVerification> verify(Path repositoryPath) {
         return store.readLatestIdentity().map(identity -> new PassportVerification(identity.passport(),
                 matches(identity, source.captureIdentity(repositoryPath)) ? PassportStatus.CURRENT : PassportStatus.EXPIRED));
     }

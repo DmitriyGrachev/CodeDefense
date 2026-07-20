@@ -9,10 +9,14 @@ import dev.codedefense.ai.ProcessExecutor;
 import dev.codedefense.ai.ProcessResult;
 import dev.codedefense.ai.ProcessSpec;
 import dev.codedefense.domain.ProjectSnapshot;
+import dev.codedefense.domain.StagedChange;
+import dev.codedefense.domain.StagedChangeFile;
 import dev.codedefense.domain.StagedFileStatus;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -31,6 +35,80 @@ class GitCliStagedChangeSourceTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void requiresEveryStagedChangeSourceToImplementMetadataOnlyInspection() throws Exception {
+        assertFalse(StagedChangeSource.class.getMethod("inspect", Path.class).isDefault());
+    }
+
+    @Test
+    void inspectsAllStagedMetadataWithoutReadingHunksOrBlobContent() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("inspection"));
+        FakeProcessExecutor executor = successfulExecutor(root);
+        executor.responses.put(rawDiffKey(), result(
+                ":000000 100644 " + zeros() + " " + NEW + " A\0src/AddedService.java\0"
+                        + ":100644 100644 " + OLD + " " + NEW + " M\0src/ModifiedService.java\0", false));
+        executor.responses.put(numstatDiffKey(), result(
+                "2\t0\tsrc/AddedService.java\0" + "1\t1\tsrc/ModifiedService.java\0", false));
+
+        StagedChange inspected = new GitCliStagedChangeSource(executor).inspect(root.resolve("."));
+
+        String canonicalEntries = "000000\0" + "100644\0" + zeros() + "\0" + NEW + "\0ADDED\0"
+                + "src/AddedService.java\0src/AddedService.java\0"
+                + "100644\0" + "100644\0" + OLD + "\0" + NEW + "\0MODIFIED\0"
+                + "src/ModifiedService.java\0src/ModifiedService.java";
+        String expectedFingerprint = sha256("codedefense-staged-change-v2\0" + BASE + "\0" + canonicalEntries);
+        assertEquals(root.toAbsolutePath().normalize(), inspected.repositoryRoot());
+        assertEquals(2, inspected.files().size());
+        assertEquals(List.of(
+                new StagedChangeFile(Path.of("src/AddedService.java"), StagedFileStatus.ADDED, 2, 0),
+                new StagedChangeFile(Path.of("src/ModifiedService.java"), StagedFileStatus.MODIFIED, 1, 1)),
+                inspected.files());
+        assertEquals(3, inspected.addedLines());
+        assertEquals(1, inspected.deletedLines());
+        assertEquals(expectedFingerprint, inspected.diffFingerprint());
+        assertTrue(executor.specifications().stream().noneMatch(spec -> spec.command().contains("--unified=3")));
+        assertTrue(executor.specifications().stream().noneMatch(spec -> spec.command().contains("cat-file")));
+    }
+
+    @Test
+    void rejectsAnEmptyIndexDuringInspection() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("empty-inspection"));
+        FakeProcessExecutor executor = successfulExecutor(root);
+        executor.responses.put(rawDiffKey(), result("", false));
+
+        GitChangeException exception = assertThrows(GitChangeException.class,
+                () -> new GitCliStagedChangeSource(executor).inspect(root));
+
+        assertEquals(GitChangeException.Kind.NO_STAGED_CHANGE, exception.kind());
+    }
+
+    @Test
+    void rejectsAnIndexThatChangesDuringInspection() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("changing-inspection"));
+        FakeProcessExecutor executor = successfulExecutor(root);
+        executor.queue(rawDiffKey(), result(rawOutput("src/LargeService.java", NEW), false),
+                result(rawOutput("src/LargeService.java", "e".repeat(40)), false));
+
+        GitChangeException exception = assertThrows(GitChangeException.class,
+                () -> new GitCliStagedChangeSource(executor).inspect(root));
+
+        assertEquals(GitChangeException.Kind.CHANGED_DURING_CAPTURE, exception.kind());
+    }
+
+    @Test
+    void retainsCaptureMutationProtectionWhileReadingHunks() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("changing-during-hunk-capture"));
+        FakeProcessExecutor executor = successfulExecutor(root);
+        String original = rawOutput("src/LargeService.java", NEW);
+        String changed = rawOutput("src/LargeService.java", "e".repeat(40));
+        executor.queue(rawDiffKey(), result(original, false), result(original, false), result(changed, false));
+
+        GitChangeException exception = assertThrows(GitChangeException.class,
+                () -> new GitCliStagedChangeSource(executor).capture(root));
+
+        assertEquals(GitChangeException.Kind.CHANGED_DURING_CAPTURE, exception.kind());
+    }
 
     @Test
     void capturesBoundedHunksWithoutMaterializingAGitTreeOrReadingTheWorkingTree() throws Exception {
@@ -329,6 +407,15 @@ class GitCliStagedChangeSourceTest {
 
     private static String rawOutput(String path, String objectId) {
         return ":100644 100644 " + OLD + " " + objectId + " M\0" + path + "\0";
+    }
+
+    private static String sha256(String input) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(input.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     private static final class FakeProcessExecutor implements ProcessExecutor {

@@ -74,6 +74,30 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
 
     @Override
     public CapturedStagedChange capture(Path requestedPath) {
+        CapturedMetadata capturedMetadata = captureMetadata(requestedPath);
+        Path root = capturedMetadata.capturedIndex().root();
+        List<EntryWithFile> eligible = prioritizedEligible(capturedMetadata.files());
+        List<StagedHunk> hunks = new ArrayList<>();
+        for (EntryWithFile value : eligible) {
+            hunks.addAll(readHunks(root, value));
+        }
+        if (!capturedMetadata.capturedIndex().identity().equals(captureIndexAtRoot(root).identity())) {
+            throw new GitChangeException(GitChangeException.Kind.CHANGED_DURING_CAPTURE);
+        }
+        return new CapturedStagedChange(capturedMetadata.change(), hunks);
+    }
+
+    @Override
+    public StagedChangeIdentity captureIdentity(Path requestedPath) {
+        return captureIndex(requestedPath).identity();
+    }
+
+    @Override
+    public StagedChange inspect(Path requestedPath) {
+        return captureMetadata(requestedPath).change();
+    }
+
+    private CapturedMetadata captureMetadata(Path requestedPath) {
         CapturedIndex capturedIndex = captureIndex(requestedPath);
         if (!capturedIndex.identity().hasStagedChanges()) {
             throw new GitChangeException(GitChangeException.Kind.NO_STAGED_CHANGE);
@@ -110,21 +134,10 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                 changedFiles,
                 addedLines,
                 deletedLines);
-
-        List<EntryWithFile> eligible = prioritizedEligible(files);
-        List<StagedHunk> hunks = new ArrayList<>();
-        for (EntryWithFile value : eligible) {
-            hunks.addAll(readHunks(root, value));
-        }
         if (!capturedIndex.identity().equals(captureIndexAtRoot(root).identity())) {
             throw new GitChangeException(GitChangeException.Kind.CHANGED_DURING_CAPTURE);
         }
-        return new CapturedStagedChange(change, hunks);
-    }
-
-    @Override
-    public StagedChangeIdentity captureIdentity(Path requestedPath) {
-        return captureIndex(requestedPath).identity();
+        return new CapturedMetadata(capturedIndex, change, List.copyOf(files));
     }
 
     private CapturedIndex captureIndex(Path requestedPath) {
@@ -530,6 +543,9 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
     private record CapturedIndex(Path root, List<RawEntry> rawEntries, StagedChangeIdentity identity) {
     }
 
+    private record CapturedMetadata(CapturedIndex capturedIndex, StagedChange change, List<EntryWithFile> files) {
+    }
+
     private static final class ParsedHunk {
         private final int oldStartLine;
         private final int oldLineCount;
@@ -538,6 +554,8 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
         private final StringBuilder content = new StringBuilder();
         private int oldLinesSeen;
         private int newLinesSeen;
+        private final List<dev.codedefense.domain.SourceLineRange> changedNewLineRanges = new ArrayList<>();
+        private int changedRangeStart = -1;
 
         private ParsedHunk(int oldStartLine, int oldLineCount, int newStartLine, int newLineCount) {
             this.oldStartLine = oldStartLine;
@@ -553,8 +571,17 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                     newLinesSeen++;
                 }
                 case '-' -> oldLinesSeen++;
-                case '+' -> newLinesSeen++;
+                case '+' -> {
+                    int lineNumber = newStartLine + newLinesSeen;
+                    if (changedRangeStart < 0) changedRangeStart = lineNumber;
+                    newLinesSeen++;
+                }
                 default -> throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
+            }
+            if (line.charAt(0) != '+' && changedRangeStart >= 0) {
+                changedNewLineRanges.add(new dev.codedefense.domain.SourceLineRange(
+                        changedRangeStart, newStartLine + newLinesSeen - 1));
+                changedRangeStart = -1;
             }
             if (oldLinesSeen > oldLineCount || newLinesSeen > newLineCount) {
                 throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
@@ -568,8 +595,13 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                 throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
             }
             content.setLength(content.length() - 1);
+            if (changedRangeStart >= 0) {
+                changedNewLineRanges.add(new dev.codedefense.domain.SourceLineRange(
+                        changedRangeStart, newStartLine + newLinesSeen - 1));
+                changedRangeStart = -1;
+            }
             return new StagedHunk(file, oldStartLine, oldLineCount, newStartLine, newLineCount,
-                    content.toString(), truncated);
+                    content.toString(), truncated, changedNewLineRanges);
         }
     }
 }

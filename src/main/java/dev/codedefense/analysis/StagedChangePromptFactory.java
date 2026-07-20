@@ -2,6 +2,7 @@ package dev.codedefense.analysis;
 
 import dev.codedefense.domain.ProjectSnapshot;
 import dev.codedefense.domain.StagedChange;
+import dev.codedefense.domain.DefenseFocus;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,6 +21,10 @@ public final class StagedChangePromptFactory {
     StagedChangePromptFactory(ClassLoader classLoader) { this.classLoader = Objects.requireNonNull(classLoader); }
 
     public String create(StagedChange change, ProjectSnapshot snapshot) {
+        return create(change, snapshot, DefenseFocus.BALANCED);
+    }
+
+    public String create(StagedChange change, ProjectSnapshot snapshot, DefenseFocus focus) {
         Objects.requireNonNull(change, "Staged change");
         Objects.requireNonNull(snapshot, "Project snapshot");
         String payload = "Project root: " + change.repositoryRoot() + "\n"
@@ -31,7 +36,8 @@ public final class StagedChangePromptFactory {
                 + "Deleted lines: " + change.deletedLines() + "\n\n"
                 + snapshot.promptContent();
         String boundary = boundaryFor(payload);
-        return loadInstructions() + "\n\nBEGIN " + boundary + "\n" + payload + "\nEND " + boundary + "\n";
+        String directive = DefenseFocusPolicy.forFocus(Objects.requireNonNull(focus, "focus")).analysisInstruction();
+        return loadInstructions() + "\n\n" + directive + "\n\nBEGIN " + boundary + "\n" + payload + "\nEND " + boundary + "\n";
     }
 
     private static String boundaryFor(String content) {

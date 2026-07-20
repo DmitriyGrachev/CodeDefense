@@ -7,6 +7,8 @@ import dev.codedefense.cli.SampleCommand;
 import dev.codedefense.cli.StartCommand;
 import dev.codedefense.cli.ProveCommand;
 import dev.codedefense.cli.PassportCommand;
+import dev.codedefense.cli.BridgeCommand;
+import dev.codedefense.cli.CodexHookCommand;
 import dev.codedefense.application.DefaultProjectDefenseRunner;
 import dev.codedefense.application.ProjectDefenseRunner;
 import dev.codedefense.application.RunSampleUseCase;
@@ -60,8 +62,10 @@ public final class CodeDefenseApplication {
         commandLine.addSubcommand("report", reportCommand);
         commandLine.addSubcommand("prove", proveCommand);
         commandLine.addSubcommand("passport", passportCommand);
+        commandLine.addSubcommand("bridge", new BridgeCommand());
+        commandLine.addSubcommand("codex-hook", new CodexHookCommand());
         commandLine.setParameterExceptionHandler((exception, arguments) -> {
-            exception.getCommandLine().getErr().println(exception.getMessage());
+            exception.getCommandLine().getErr().println("Invalid command usage.");
             exception.getCommandLine().getErr().println("Try 'codedefense --help' for more information.");
             return ExitCodes.INVALID_USAGE;
         });

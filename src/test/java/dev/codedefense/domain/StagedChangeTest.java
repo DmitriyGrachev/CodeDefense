@@ -19,11 +19,11 @@ class StagedChangeTest {
     void constructsAnImmutableOrderedStagedChange() {
         List<StagedChangeFile> files = new ArrayList<>(List.of(file("src/App.java")));
 
-        StagedChange change = new StagedChange(Path.of("C:/repository"), SHA_256, GIT_ID, INDEX_ID,
+        StagedChange change = new StagedChange(root(), SHA_256, GIT_ID, INDEX_ID,
                 SHA_256, files, 3, 1);
         files.clear();
 
-        assertEquals(Path.of("C:/repository").toAbsolutePath().normalize(), change.repositoryRoot());
+        assertEquals(root(), change.repositoryRoot());
         assertEquals(1, change.files().size());
         assertThrows(UnsupportedOperationException.class, () -> change.files().add(file("src/Other.java")));
     }
@@ -42,7 +42,7 @@ class StagedChangeTest {
 
     @Test
     void rejectsUnsafeFilePathsAndLineCounts() {
-        assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(Path.of("C:/absolute"), StagedFileStatus.ADDED, 1, 0));
+        assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(root().resolve("absolute"), StagedFileStatus.ADDED, 1, 0));
         assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(Path.of("src/../App.java"), StagedFileStatus.ADDED, 1, 0));
         assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(Path.of("src", "bad\u0000name"), StagedFileStatus.ADDED, 1, 0));
         assertThrows(IllegalArgumentException.class, () -> new StagedChangeFile(Path.of("src/App.java"), StagedFileStatus.ADDED, -1, 0));
@@ -96,7 +96,7 @@ class StagedChangeTest {
     }
 
     private static Path root() {
-        return Path.of("C:/repository").toAbsolutePath().normalize();
+        return Path.of(System.getProperty("java.io.tmpdir"), "codedefense-tests", "repository").toAbsolutePath().normalize();
     }
 
     private static StagedChangeFile file(String path) {

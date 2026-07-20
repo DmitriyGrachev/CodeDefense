@@ -1,6 +1,8 @@
 package dev.codedefense.cli;
 
 import dev.codedefense.application.StagedChangeDefenseRunner;
+import dev.codedefense.application.GitChangeDefenseRunner;
+import dev.codedefense.domain.ChangeKind;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
 import java.io.StringReader;
@@ -8,12 +10,54 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import picocli.CommandLine;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ProveCommandTest {
+    @Test
+    void provenanceRequiresAllConsentOptionsAndKillSwitchBeforeRunner() {
+        AtomicInteger calls = new AtomicInteger();
+        GitChangeDefenseRunner runner = (path, selector, dry, yes, out, err) -> {
+            calls.incrementAndGet(); return ExitCodes.SUCCESS;
+        };
+        CommandLine command = new CommandLine(new ProveCommand(runner, Map::of));
+
+        assertEquals(ExitCodes.INVALID_USAGE,
+                command.execute("--staged", "--experimental-codex-provenance"));
+        assertEquals(ExitCodes.INVALID_USAGE, command.execute("--staged",
+                "--experimental-codex-provenance", "--codex-thread", "private-thread-id",
+                "--consent-codex-history"));
+        assertEquals(0, calls.get());
+    }
+
+    @Test
+    void delegatesEphemeralThreadOnlyWhenFullConsentAndKillSwitchArePresent() {
+        AtomicReference<dev.codedefense.application.CodexProvenanceRequest> captured = new AtomicReference<>();
+        GitChangeDefenseRunner runner = new GitChangeDefenseRunner() {
+            @Override public int run(Path path, dev.codedefense.domain.ChangeSelector selector,
+                    boolean dry, boolean yes, PrintWriter out, PrintWriter err) {
+                throw new AssertionError("provenance-aware overload required");
+            }
+            @Override public int run(Path path, dev.codedefense.domain.ChangeSelector selector,
+                    dev.codedefense.domain.DefenseFocus focus, boolean dry, boolean yes,
+                    dev.codedefense.application.CodexProvenanceRequest provenance,
+                    PrintWriter out, PrintWriter err) {
+                captured.set(provenance); return ExitCodes.SUCCESS;
+            }
+        };
+        CommandLine command = new CommandLine(new ProveCommand(runner,
+                () -> Map.of("CODEDEFENSE_EXPERIMENTAL_CODEX_PROVENANCE", "true")));
+
+        assertEquals(ExitCodes.SUCCESS, command.execute("--staged", "--dry-run",
+                "--experimental-codex-provenance", "--codex-thread", "private-thread-id",
+                "--consent-codex-history"));
+        assertEquals(true, captured.get().enabled());
+        assertEquals("private-thread-id", captured.get().threadId());
+        org.junit.jupiter.api.Assertions.assertFalse(captured.get().toString().contains("private-thread-id"));
+    }
     @Test
     void stagedDryRunDelegatesOnceWithConfiguredWriters() {
         AtomicInteger calls = new AtomicInteger();
@@ -59,5 +103,33 @@ class ProveCommandTest {
 
         assertEquals(ExitCodes.SUCCESS, commandLine.execute("--staged"));
         assertEquals(true, accepted.get());
+    }
+
+    @Test
+    void commitAndRangeSelectorsAreExclusiveAndDelegatedAsTypedValues() {
+        AtomicReference<ChangeKind> kind = new AtomicReference<>();
+        GitChangeDefenseRunner runner = (path, selector, dryRun, yes, out, err) -> {
+            kind.set(selector.kind());
+            return ExitCodes.SUCCESS;
+        };
+        CommandLine command = new CommandLine(new ProveCommand(runner));
+
+        assertEquals(ExitCodes.SUCCESS, command.execute("--commit", "HEAD~1", "repo"));
+        assertEquals(ChangeKind.COMMIT, kind.get());
+        assertEquals(ExitCodes.SUCCESS, command.execute("--range", "main...HEAD", "repo"));
+        assertEquals(ChangeKind.RANGE, kind.get());
+        assertEquals(ExitCodes.INVALID_USAGE,
+                command.execute("--staged", "--commit", "HEAD", "repo"));
+    }
+
+    @Test
+    void acceptsFourFocusModesAndRejectsFreeFormFocus() {
+        GitChangeDefenseRunner runner = (path, selector, dryRun, yes, out, err) -> ExitCodes.SUCCESS;
+        CommandLine command = new CommandLine(new ProveCommand(runner));
+        for (String focus : new String[] {"balanced", "architecture", "failure-modes", "testing"}) {
+            assertEquals(ExitCodes.SUCCESS, command.execute("--staged", "--focus", focus, "--dry-run"));
+        }
+        assertEquals(ExitCodes.INVALID_USAGE,
+                command.execute("--staged", "--focus", "invent-a-prompt", "--dry-run"));
     }
 }

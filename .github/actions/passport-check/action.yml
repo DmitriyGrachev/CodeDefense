@@ -1,0 +1,49 @@
+name: CodeDefense Passport Check
+description: Source-free, model-free Passport fingerprint continuity check
+inputs:
+  base:
+    description: Base commit or revision
+    required: true
+  head:
+    description: Head commit or revision
+    required: true
+  policy:
+    description: advisory or required
+    required: false
+    default: advisory
+  repository:
+    description: Repository path
+    required: false
+    default: .
+runs:
+  using: composite
+  steps:
+    - name: Set up Java 21
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+        cache: maven
+    - name: Build CodeDefense
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: mvn -q -DskipTests package
+    - name: Check Passport continuity
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        CODEDEFENSE_BASE: ${{ inputs.base }}
+        CODEDEFENSE_HEAD: ${{ inputs.head }}
+        CODEDEFENSE_POLICY: ${{ inputs.policy }}
+        CODEDEFENSE_REPOSITORY: ${{ inputs.repository }}
+      run: |
+        set +e
+        java -jar target/codedefense.jar passport ci-check \
+          --base "$CODEDEFENSE_BASE" \
+          --head "$CODEDEFENSE_HEAD" \
+          --policy "$CODEDEFENSE_POLICY" \
+          --format github \
+          "$CODEDEFENSE_REPOSITORY" > "$RUNNER_TEMP/codedefense-passport-summary.md"
+        exit_code=$?
+        cat "$RUNNER_TEMP/codedefense-passport-summary.md" >> "$GITHUB_STEP_SUMMARY"
+        exit "$exit_code"

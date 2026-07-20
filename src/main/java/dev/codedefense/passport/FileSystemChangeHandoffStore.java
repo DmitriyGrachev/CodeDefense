@@ -1,0 +1,14 @@
+package dev.codedefense.passport;
+
+import java.io.*;
+import java.nio.file.*;
+import java.util.Objects;
+
+public final class FileSystemChangeHandoffStore implements ChangeHandoffFileStore {
+ @Override public Path write(Path output,byte[] content,boolean overwrite){Objects.requireNonNull(content);if(content.length==0||content.length>ChangeHandoffJsonCodec.MAXIMUM_BYTES)throw ChangeHandoffPersistenceException.writeFailure();Path temp=null;try{Path target=safeOutput(output);if(Files.exists(target,LinkOption.NOFOLLOW_LINKS)){if(Files.isSymbolicLink(target)||!overwrite)throw new IOException();if(!Files.isRegularFile(target,LinkOption.NOFOLLOW_LINKS))throw new IOException();}temp=Files.createTempFile(target.getParent(),".codedefense-handoff-",".tmp");Files.write(temp,content,StandardOpenOption.TRUNCATE_EXISTING);try{if(overwrite)Files.move(temp,target,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);else Files.move(temp,target,StandardCopyOption.ATOMIC_MOVE);}
+ catch(AtomicMoveNotSupportedException e){if(overwrite)Files.move(temp,target,StandardCopyOption.REPLACE_EXISTING);else Files.move(temp,target);}return target;}catch(Exception e){if(temp!=null)try{Files.deleteIfExists(temp);}catch(IOException ignored){}throw ChangeHandoffPersistenceException.writeFailure();}}
+ @Override public byte[] read(Path input){try{Path file=safeInput(input);try(InputStream in=Files.newInputStream(file,StandardOpenOption.READ,LinkOption.NOFOLLOW_LINKS);ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int total=0,n;while((n=in.read(buffer))>=0){total+=n;if(total>ChangeHandoffJsonCodec.MAXIMUM_BYTES)throw new IOException();out.write(buffer,0,n);}return out.toByteArray();}}catch(Exception e){throw ChangeHandoffPersistenceException.invalid();}}
+ private static Path safeOutput(Path p)throws IOException{Objects.requireNonNull(p);Path target=p.toAbsolutePath().normalize();Path parent=target.getParent();if(parent==null||!target.getFileName().toString().endsWith(".cdhandoff.json")||!Files.isDirectory(parent,LinkOption.NOFOLLOW_LINKS))throw new IOException();requireNoSymlinkComponents(parent);parent.toRealPath(LinkOption.NOFOLLOW_LINKS);return target;}
+ private static Path safeInput(Path p)throws IOException{Path file=Objects.requireNonNull(p).toAbsolutePath().normalize();Path parent=file.getParent();if(parent==null||!Files.isDirectory(parent,LinkOption.NOFOLLOW_LINKS)||Files.isSymbolicLink(file)||!Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS))throw new IOException();requireNoSymlinkComponents(parent);parent.toRealPath(LinkOption.NOFOLLOW_LINKS);return file;}
+ private static void requireNoSymlinkComponents(Path path)throws IOException{Path current=path.getRoot();for(Path segment:path){current=current==null?segment:current.resolve(segment);if(Files.isSymbolicLink(current))throw new IOException();}}
+}

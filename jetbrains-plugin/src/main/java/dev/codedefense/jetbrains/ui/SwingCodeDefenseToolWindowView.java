@@ -1,6 +1,8 @@
 package dev.codedefense.jetbrains.ui;
 
 import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
+import dev.codedefense.jetbrains.evidence.EvidenceCoveragePanel;
+import dev.codedefense.jetbrains.evidence.EvidenceCoverageView;
 import dev.codedefense.jetbrains.gate.StagedGateView;
 import dev.codedefense.jetbrains.insights.LearningRadarPanel;
 import dev.codedefense.jetbrains.insights.RepositoryInsightsView;
@@ -48,6 +50,7 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     private final JPanel evidencePanel = new JPanel();
     private final JPanel evidenceSection = new JPanel();
     private final LearningRadarPanel learningRadar = new LearningRadarPanel();
+    private final EvidenceCoveragePanel evidenceCoverage = new EvidenceCoveragePanel();
     private final JTextField answer = new JTextField();
     private final JButton submit = new JButton("Answer");
     private final JButton skip = new JButton("Skip");
@@ -186,7 +189,11 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         JPanel center = new JPanel(new BorderLayout(4, 8));
         center.setName("codeDefense.cockpitBody");
         center.add(session, BorderLayout.CENTER);
-        center.add(learningRadar, BorderLayout.SOUTH);
+        JPanel learning = new JPanel();
+        learning.setLayout(new BoxLayout(learning, BoxLayout.Y_AXIS));
+        learning.add(evidenceCoverage);
+        learning.add(learningRadar);
+        center.add(learning, BorderLayout.SOUTH);
         root.add(center, BorderLayout.CENTER);
 
         JPanel sessionDetails = new JPanel();
@@ -310,6 +317,11 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         evidenceSection.setVisible(false);
         refreshEvidenceLayout();
     }
+    @Override public void showEvidenceCoverage(EvidenceCoverageView coverage,
+            Function<EvidenceLocationView, EvidenceNavigator.NavigationResult> opener) {
+        evidenceCoverage.showCoverage(coverage, opener);
+    }
+    @Override public void clearEvidenceCoverage() { evidenceCoverage.clearCoverage(); }
 
     private void refreshEvidenceLayout() {
         evidencePanel.revalidate();

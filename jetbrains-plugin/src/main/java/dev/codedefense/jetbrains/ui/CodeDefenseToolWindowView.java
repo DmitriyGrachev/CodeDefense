@@ -4,6 +4,7 @@ import dev.codedefense.jetbrains.gate.StagedGateView;
 import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
 import dev.codedefense.jetbrains.process.EvidenceLocationView;
 import dev.codedefense.jetbrains.insights.RepositoryInsightsView;
+import dev.codedefense.jetbrains.evidence.EvidenceCoverageView;
 import java.util.List;
 import java.util.function.Function;
 
@@ -29,6 +30,9 @@ public interface CodeDefenseToolWindowView {
     default void showEvidence(List<EvidenceLocationView> locations,
             Function<EvidenceLocationView, EvidenceNavigator.NavigationResult> opener) { }
     default void clearEvidence() { }
+    default void showEvidenceCoverage(EvidenceCoverageView coverage,
+            Function<EvidenceLocationView, EvidenceNavigator.NavigationResult> opener) { }
+    default void clearEvidenceCoverage() { }
     default void showRepositoryInsights(RepositoryInsightsView value) { }
     default void showRepositoryInsightsUnavailable() { }
 }

@@ -47,7 +47,7 @@ public final class BridgeProcess implements AutoCloseable {
         this.eventConsumer = Objects.requireNonNull(eventConsumer, "eventConsumer");
         this.terminationGrace = positive(terminationGrace);
         try {
-            startAttempt(new Attempt(processStarter.start(2), new BridgeLineCodec(2), true));
+            startAttempt(new Attempt(processStarter.start(3), new BridgeLineCodec(3), true));
         } catch (IOException | RuntimeException exception) {
             throw new BridgeTransportException("CodeDefense could not be started.");
         }
@@ -183,7 +183,7 @@ public final class BridgeProcess implements AutoCloseable {
     }
 
     private boolean isLegacyUnsupportedVersion(Attempt attempt, BridgeMessage event) {
-        return attempt.codec.protocolVersion() == 2 && event.protocolVersion() == 1
+        return attempt.codec.protocolVersion() == 3 && event.protocolVersion() == 1
                 && attempt.validEvents.get() == 0 && !attempt.outboundRequest.get()
                 && event.type().equals("error")
                 && "INVALID_REQUEST".equals(event.text("code"))

@@ -63,13 +63,13 @@ final class JdkCodeDefenseLauncher implements CodeDefenseLauncher {
     }
 
     List<String> command(Path projectRoot, BridgeLaunchSpec spec) {
-        return command(projectRoot, spec, 2);
+        return command(projectRoot, spec, 3);
     }
 
     List<String> command(Path projectRoot, BridgeLaunchSpec spec, int protocolVersion) {
         Path root = projectRoot(projectRoot);
         Objects.requireNonNull(spec, "spec");
-        if (protocolVersion != 1 && protocolVersion != 2) {
+        if (protocolVersion != 1 && protocolVersion != 2 && protocolVersion != 3) {
             throw new IllegalArgumentException("Unsupported bridge protocol version.");
         }
         List<String> command = new ArrayList<>(List.of(javaExecutable.toString(), "-jar", bundledJar.toString(),

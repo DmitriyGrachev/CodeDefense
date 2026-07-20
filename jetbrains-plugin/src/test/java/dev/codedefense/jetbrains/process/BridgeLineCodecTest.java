@@ -127,7 +127,7 @@ class BridgeLineCodecTest {
         String marker = "PRIVATE-ANSWER-5c42";
         String json = new String(codec.answerRequest(marker), StandardCharsets.UTF_8);
 
-        assertEquals("{\"protocolVersion\":2,\"type\":\"answer\",\"answer\":\"" + marker + "\"}\n", json);
+        assertEquals("{\"protocolVersion\":3,\"type\":\"answer\",\"answer\":\"" + marker + "\"}\n", json);
         assertFalse(codec.toString().contains(marker));
     }
 
@@ -136,7 +136,7 @@ class BridgeLineCodecTest {
         String threadId = "private-thread-id";
         String json = new String(codec.provenanceConsentRequest(threadId, true), StandardCharsets.UTF_8);
 
-        assertEquals("{\"protocolVersion\":2,\"type\":\"provenanceConsent\","
+        assertEquals("{\"protocolVersion\":3,\"type\":\"provenanceConsent\","
                 + "\"threadId\":\"private-thread-id\",\"consent\":true}\n", json);
         assertFalse(codec.toString().contains(threadId));
         assertThrows(BridgeTransportException.class,
@@ -150,7 +150,8 @@ class BridgeLineCodecTest {
         assertEquals("{\"protocolVersion\":1,\"type\":\"skip\"}\n",
                 new String(legacy.skipRequest(), StandardCharsets.UTF_8));
         assertThrows(IllegalArgumentException.class, () -> new BridgeLineCodec(0));
-        assertThrows(IllegalArgumentException.class, () -> new BridgeLineCodec(3));
+        assertEquals(3, new BridgeLineCodec(3).protocolVersion());
+        assertThrows(IllegalArgumentException.class, () -> new BridgeLineCodec(4));
     }
 
     @Test

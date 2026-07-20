@@ -159,6 +159,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
         uiCurrent(generation, () -> {
             view.setRetryAvailable(false);
             view.clearEvidence();
+            view.clearEvidenceCoverage();
             view.setSessionActive(true);
         });
         background.execute(() -> {
@@ -237,6 +238,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
         uiCurrent(generation, () -> {
             view.setRetryAvailable(false);
             view.clearEvidence();
+            view.clearEvidenceCoverage();
             view.setSessionActive(false);
         });
     }
@@ -313,6 +315,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
                 }
                 case "provenance" -> view.showProvenance(safe(event.text("status")) + "\n"
                         + safe(event.text("disclaimer")));
+                case "coverage" -> view.showEvidenceCoverage(event.coverage(), evidenceNavigator::open);
                 case "completed" -> {
                     view.showCompleted("Completed with exit code "
                             + event.integer("exitCode") + ". Codex invoked: " + event.bool("codexInvoked"));
@@ -326,6 +329,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
                     } else if (!"INVALID_ANSWER".equals(errorCode)) {
                         view.setRetryAvailable(false);
                         view.clearEvidence();
+                        view.clearEvidenceCoverage();
                     }
                 }
                 default -> {

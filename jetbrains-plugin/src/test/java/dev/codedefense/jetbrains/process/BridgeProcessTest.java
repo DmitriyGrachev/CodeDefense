@@ -60,7 +60,7 @@ class BridgeProcessTest {
         List<Integer> attempts = new CopyOnWriteArrayList<>();
         BridgeProcess bridge = new BridgeProcess(version -> {
             attempts.add(version);
-            return version == 2
+            return version == 3
                     ? process("rejectProtocol").start()
                     : process("exchangeVersion", "1", "skip").start();
         }, event -> { }, Duration.ofMillis(200));
@@ -69,7 +69,7 @@ class BridgeProcessTest {
         bridge.sendSkip();
 
         assertEquals(0, bridge.completion().get(10, TimeUnit.SECONDS));
-        assertEquals(List.of(2, 1), attempts);
+        assertEquals(List.of(3, 1), attempts);
         assertEquals(1, bridge.protocolVersion());
     }
 
@@ -79,7 +79,7 @@ class BridgeProcessTest {
         List<String> delivered = new CopyOnWriteArrayList<>();
         BridgeProcess bridge = new BridgeProcess(version -> {
             attempts.add(version);
-            return version == 2
+            return version == 3
                     ? process("legacyUnsupported").start()
                     : process("exchangeVersion", "1", "skip").start();
         }, event -> delivered.add(event.type()), Duration.ofMillis(200));
@@ -88,24 +88,24 @@ class BridgeProcessTest {
         bridge.sendSkip();
 
         assertEquals(0, bridge.completion().get(10, TimeUnit.SECONDS));
-        assertEquals(List.of(2, 1), attempts);
+        assertEquals(List.of(3, 1), attempts);
         assertEquals(List.of("hello", "completed"), delivered);
     }
 
     @Test
-    void protocolTwoAttemptControlsOutboundRequestEncoding() throws Exception {
+    void protocolThreeAttemptControlsOutboundRequestEncoding() throws Exception {
         List<Integer> attempts = new CopyOnWriteArrayList<>();
         BridgeProcess bridge = new BridgeProcess(version -> {
             attempts.add(version);
             return process("exchangeVersion", Integer.toString(version), "answer").start();
         }, event -> { }, Duration.ofMillis(200));
 
-        awaitProtocol(bridge, 2);
+        awaitProtocol(bridge, 3);
         bridge.sendAnswer("bounded answer");
 
         assertEquals(0, bridge.completion().get(10, TimeUnit.SECONDS));
-        assertEquals(List.of(2), attempts);
-        assertEquals(2, bridge.protocolVersion());
+        assertEquals(List.of(3), attempts);
+        assertEquals(3, bridge.protocolVersion());
     }
 
     @Test
@@ -140,13 +140,13 @@ class BridgeProcessTest {
         List<Integer> attempts = new CopyOnWriteArrayList<>();
         BridgeProcess bridge = new BridgeProcess(version -> {
             attempts.add(version);
-            return version == 2 ? process("requestThenInvalid").start() : process("fail").start();
+            return version == 3 ? process("requestThenInvalid").start() : process("fail").start();
         }, event -> { }, Duration.ofMillis(200));
 
         bridge.sendSkip();
 
         assertEquals(2, bridge.completion().get(10, TimeUnit.SECONDS));
-        assertEquals(List.of(2), attempts);
+        assertEquals(List.of(3), attempts);
     }
 
     @Test

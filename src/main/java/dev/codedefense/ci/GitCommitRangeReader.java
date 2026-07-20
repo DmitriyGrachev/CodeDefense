@@ -37,7 +37,7 @@ public final class GitCommitRangeReader {
         for (String id : ids) {
             if (!id.matches("[0-9a-f]{40,64}")) throw unavailable();
             List<String> parents = List.of(run(root, 4096, "rev-list", "--parents", "-n", "1", id).split("\\s+"));
-            if (parents.size() != 2 || !parents.getFirst().equals(id)) throw unavailable();
+            if (parents.size() < 2 || !parents.getFirst().equals(id)) throw unavailable();
             String message = run(root, 16 * 1024, "show", "-s", "--format=%B", id);
             commits.add(new GitRangeCommit(id, parents.get(1), message));
         }

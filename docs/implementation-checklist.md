@@ -22,8 +22,8 @@
 - [ ] Iteration 8.15 — repository learning radar (implemented and offline-verified; Plugin Verifier and installed-plugin acceptance pending).
 - [ ] Iteration 8.16 — Passport-aware commit trailer and Cockpit polish (implemented and offline-verified; Plugin Verifier and installed-plugin acceptance pending).
 - [ ] Iteration 8.17 — Codex plugin, source-free skill, and advisory staged Passport Stop hook (implemented and offline-verified; installed-plugin and cross-platform launcher acceptance pending).
-- [ ] Iteration 8.18 — Evidence Coverage Map (implemented and offline-verified; installed-plugin acceptance pending).
-- [ ] Iteration 8.19 — GitHub Actions Passport continuity check (implemented and offline-verified; live GitHub Actions acceptance pending).
+- [x] Iteration 8.18 — Evidence Coverage Map (installed-plugin acceptance verified).
+- [x] Iteration 8.19 — GitHub Actions Passport continuity check (live pull-request Actions acceptance verified).
 - [ ] Iteration 9 — reliability, release documentation, and submission readiness.
 
 Only the current approved iteration may be implemented. The detailed acceptance criteria are in the [master implementation plan](codedefense-mvp-implementation-plan.md).

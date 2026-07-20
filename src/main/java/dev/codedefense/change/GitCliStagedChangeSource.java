@@ -554,6 +554,8 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
         private final StringBuilder content = new StringBuilder();
         private int oldLinesSeen;
         private int newLinesSeen;
+        private final List<dev.codedefense.domain.SourceLineRange> changedNewLineRanges = new ArrayList<>();
+        private int changedRangeStart = -1;
 
         private ParsedHunk(int oldStartLine, int oldLineCount, int newStartLine, int newLineCount) {
             this.oldStartLine = oldStartLine;
@@ -569,8 +571,17 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                     newLinesSeen++;
                 }
                 case '-' -> oldLinesSeen++;
-                case '+' -> newLinesSeen++;
+                case '+' -> {
+                    int lineNumber = newStartLine + newLinesSeen;
+                    if (changedRangeStart < 0) changedRangeStart = lineNumber;
+                    newLinesSeen++;
+                }
                 default -> throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
+            }
+            if (line.charAt(0) != '+' && changedRangeStart >= 0) {
+                changedNewLineRanges.add(new dev.codedefense.domain.SourceLineRange(
+                        changedRangeStart, newStartLine + newLinesSeen - 1));
+                changedRangeStart = -1;
             }
             if (oldLinesSeen > oldLineCount || newLinesSeen > newLineCount) {
                 throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
@@ -584,8 +595,13 @@ public final class GitCliStagedChangeSource implements StagedChangeSource {
                 throw new GitChangeException(GitChangeException.Kind.MALFORMED_DATA);
             }
             content.setLength(content.length() - 1);
+            if (changedRangeStart >= 0) {
+                changedNewLineRanges.add(new dev.codedefense.domain.SourceLineRange(
+                        changedRangeStart, newStartLine + newLinesSeen - 1));
+                changedRangeStart = -1;
+            }
             return new StagedHunk(file, oldStartLine, oldLineCount, newStartLine, newLineCount,
-                    content.toString(), truncated);
+                    content.toString(), truncated, changedNewLineRanges);
         }
     }
 }

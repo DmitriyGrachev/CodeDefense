@@ -1,6 +1,9 @@
 package dev.codedefense.change;
 
 import dev.codedefense.domain.StagedChangeFile;
+import dev.codedefense.domain.SourceLineRange;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -15,7 +18,8 @@ public record StagedHunk(
         int newStartLine,
         int newLineCount,
         String unifiedContent,
-        boolean truncated) {
+        boolean truncated,
+        List<SourceLineRange> changedNewLineRanges) {
     public StagedHunk {
         Objects.requireNonNull(file, "file");
         if (oldStartLine < 0 || newStartLine < 0 || oldLineCount < 0 || newLineCount < 0
@@ -26,11 +30,50 @@ public record StagedHunk(
         if (unifiedContent.isBlank()) {
             throw new IllegalArgumentException("unifiedContent must be nonblank");
         }
+        Objects.requireNonNull(changedNewLineRanges, "changedNewLineRanges");
+        changedNewLineRanges = List.copyOf(changedNewLineRanges);
+        if (changedNewLineRanges.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("changedNewLineRanges contain null");
+        }
+        int newEnd = newLineCount == 0 ? 0 : newStartLine + newLineCount - 1;
+        if (changedNewLineRanges.stream().anyMatch(range -> newLineCount == 0
+                || range.startLine() < newStartLine || range.endLine() > newEnd)) {
+            throw new IllegalArgumentException("changedNewLineRanges escape the hunk");
+        }
+    }
+
+    public StagedHunk(StagedChangeFile file, int oldStartLine, int oldLineCount,
+            int newStartLine, int newLineCount, String unifiedContent, boolean truncated) {
+        this(file, oldStartLine, oldLineCount, newStartLine, newLineCount,
+                unifiedContent, truncated, inferChangedRanges(newStartLine, unifiedContent));
     }
 
     @Override
     public String toString() {
         return "StagedHunk[path=%s, old=%d-%d, new=%d-%d, truncated=%s]".formatted(
                 file.path(), oldStartLine, oldLineCount, newStartLine, newLineCount, truncated);
+    }
+
+    private static List<SourceLineRange> inferChangedRanges(int newStartLine, String content) {
+        Objects.requireNonNull(content, "unifiedContent");
+        List<SourceLineRange> ranges = new ArrayList<>();
+        int currentNewLine = newStartLine;
+        int rangeStart = -1;
+        for (String line : content.split("\\n", -1)) {
+            if (line.isEmpty()) continue;
+            char prefix = line.charAt(0);
+            if (prefix == '+') {
+                if (rangeStart < 0) rangeStart = currentNewLine;
+                currentNewLine++;
+            } else {
+                if (rangeStart >= 0) {
+                    ranges.add(new SourceLineRange(rangeStart, currentNewLine - 1));
+                    rangeStart = -1;
+                }
+                if (prefix == ' ') currentNewLine++;
+            }
+        }
+        if (rangeStart >= 0) ranges.add(new SourceLineRange(rangeStart, currentNewLine - 1));
+        return List.copyOf(ranges);
     }
 }

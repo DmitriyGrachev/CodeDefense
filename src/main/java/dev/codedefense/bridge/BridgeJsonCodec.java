@@ -63,7 +63,7 @@ public final class BridgeJsonCodec {
                 node.put("total", value.total());
                 node.put("followUp", value.followUp());
                 node.put("prompt", value.prompt());
-                if (protocolVersion == BridgeProtocol.VERSION_2) {
+                if (protocolVersion >= BridgeProtocol.VERSION_2) {
                     ArrayNode locations = node.putArray("evidence");
                     evidence.forEach(location -> {
                         ObjectNode encoded = locations.addObject();
@@ -97,6 +97,26 @@ public final class BridgeJsonCodec {
             }
             case BridgeEvent.ProvenanceEvent value -> {
                 node.put("status", value.status());
+                node.put("disclaimer", value.disclaimer());
+            }
+            case BridgeEvent.CoverageEvent value -> {
+                if (protocolVersion != BridgeProtocol.VERSION_3) {
+                    throw new BridgeProtocolException("Coverage requires bridge protocol 3.");
+                }
+                node.put("totalHunks", value.totalHunks());
+                node.put("measurableHunks", value.measurableHunks());
+                node.put("referencedHunks", value.referencedHunks());
+                ArrayNode hunks = node.putArray("hunks");
+                value.hunks().forEach(hunk -> {
+                    ObjectNode encoded = hunks.addObject();
+                    encoded.put("relativePath", hunk.relativePath());
+                    encoded.put("ordinal", hunk.ordinal());
+                    encoded.put("startLine", hunk.startLine());
+                    encoded.put("endLine", hunk.endLine());
+                    encoded.put("navigable", hunk.navigable());
+                    encoded.put("state", hunk.state());
+                    strings(encoded, "categoryIds", hunk.categoryIds());
+                });
                 node.put("disclaimer", value.disclaimer());
             }
             case BridgeEvent.CompletedEvent value -> {
@@ -203,6 +223,16 @@ public final class BridgeJsonCodec {
                     fields(node, "protocolVersion", "type", "status", "disclaimer");
                     yield new BridgeEvent.ProvenanceEvent(version, text(node, "status"), text(node, "disclaimer"));
                 }
+                case "coverage" -> {
+                    if (version != BridgeProtocol.VERSION_3) throw invalid();
+                    fields(node, "protocolVersion", "type", "totalHunks", "measurableHunks",
+                            "referencedHunks", "hunks", "disclaimer");
+                    int total = integer(node, "totalHunks");
+                    int measurable = integer(node, "measurableHunks");
+                    int referenced = integer(node, "referencedHunks");
+                    yield new BridgeEvent.CoverageEvent(version, total, measurable, referenced,
+                            coverageHunks(node, "hunks"), text(node, "disclaimer"));
+                }
                 case "completed" -> {
                     fields(node, "protocolVersion", "type", "exitCode", "codexInvoked");
                     yield new BridgeEvent.CompletedEvent(version, integer(node, "exitCode"),
@@ -271,7 +301,8 @@ public final class BridgeJsonCodec {
 
     private static int version(ObjectNode node) {
         int version = integer(node, "protocolVersion");
-        if (version != BridgeProtocol.VERSION_1 && version != BridgeProtocol.VERSION_2) {
+        if (version != BridgeProtocol.VERSION_1 && version != BridgeProtocol.VERSION_2
+                && version != BridgeProtocol.VERSION_3) {
             throw new BridgeProtocolException("Unsupported bridge protocol version.");
         }
         return version;
@@ -298,6 +329,7 @@ public final class BridgeJsonCodec {
             case BridgeEvent.SummaryEvent ignored -> "summary";
             case BridgeEvent.PassportSavedEvent ignored -> "passportSaved";
             case BridgeEvent.ProvenanceEvent ignored -> "provenance";
+            case BridgeEvent.CoverageEvent ignored -> "coverage";
             case BridgeEvent.CompletedEvent ignored -> "completed";
             case BridgeEvent.ErrorEvent ignored -> "error";
         };
@@ -372,6 +404,21 @@ public final class BridgeJsonCodec {
                     integer(object, "startLine"), integer(object, "endLine")));
         }
         return List.copyOf(locations);
+    }
+
+    private static List<BridgeCoverageHunk> coverageHunks(ObjectNode node, String name) {
+        JsonNode value = node.get(name);
+        if (value == null || !value.isArray() || value.size() > 256) throw invalid();
+        java.util.ArrayList<BridgeCoverageHunk> hunks = new java.util.ArrayList<>();
+        for (JsonNode item : value) {
+            if (!(item instanceof ObjectNode object)) throw invalid();
+            fields(object, "relativePath", "ordinal", "startLine", "endLine", "navigable", "state",
+                    "categoryIds");
+            hunks.add(new BridgeCoverageHunk(text(object, "relativePath"), integer(object, "ordinal"),
+                    integer(object, "startLine"), integer(object, "endLine"), bool(object, "navigable"),
+                    text(object, "state"), strings(object, "categoryIds")));
+        }
+        return List.copyOf(hunks);
     }
 
     private static void strings(ObjectNode node, String name, List<String> values) {

@@ -159,7 +159,7 @@ class BridgeJsonCodecTest {
     @Test
     void rejectsUnsupportedProtocolVersion() {
         BridgeProtocolException exception = assertThrows(BridgeProtocolException.class,
-                () -> codec.decodeRequest(bytes("{\"protocolVersion\":3,\"type\":\"skip\"}\n")));
+                () -> codec.decodeRequest(bytes("{\"protocolVersion\":4,\"type\":\"skip\"}\n")));
 
         assertEquals("Unsupported bridge protocol version.", exception.getMessage());
     }

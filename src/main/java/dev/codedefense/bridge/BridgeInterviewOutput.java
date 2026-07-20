@@ -12,11 +12,17 @@ import java.util.Objects;
 /** Emits structured presentation events while leaving scoring to InterviewEngine. */
 public final class BridgeInterviewOutput implements InterviewOutput {
     private final BridgeSession session;
+    private final BridgeEvidenceCoveragePublisher coveragePublisher;
     private int currentQuestion;
     private int questionTotal;
 
     public BridgeInterviewOutput(BridgeSession session) {
+        this(session, new BridgeEvidenceCoveragePublisher(session));
+    }
+
+    public BridgeInterviewOutput(BridgeSession session, BridgeEvidenceCoveragePublisher coveragePublisher) {
         this.session = Objects.requireNonNull(session, "session");
+        this.coveragePublisher = Objects.requireNonNull(coveragePublisher, "coveragePublisher");
     }
 
     @Override
@@ -29,7 +35,7 @@ public final class BridgeInterviewOutput implements InterviewOutput {
         currentQuestion = current;
         questionTotal = total;
         int version = session.protocolVersion();
-        List<BridgeEvidenceLocation> evidence = version == BridgeProtocol.VERSION_2
+        List<BridgeEvidenceLocation> evidence = version >= BridgeProtocol.VERSION_2
                 ? question.evidence().stream()
                         .map(value -> new BridgeEvidenceLocation(value.path().replace('\\', '/'),
                                 value.startLine(), value.endLine()))
@@ -41,6 +47,7 @@ public final class BridgeInterviewOutput implements InterviewOutput {
                 : List.of();
         session.emit(new BridgeEvent.QuestionEvent(version, current, total, false,
                 sanitize(question.prompt(), "Question unavailable."), evidence));
+        coveragePublisher.publish(question.id());
     }
 
     @Override

@@ -6,7 +6,8 @@ import java.util.List;
 public sealed interface BridgeEvent permits BridgeEvent.HelloEvent, BridgeEvent.PreviewEvent,
         BridgeEvent.ConfirmationRequiredEvent, BridgeEvent.QuestionEvent, BridgeEvent.EvaluationEvent,
         BridgeEvent.QuestionScoreEvent, BridgeEvent.SummaryEvent, BridgeEvent.PassportSavedEvent,
-        BridgeEvent.ProvenanceEvent, BridgeEvent.CompletedEvent, BridgeEvent.ErrorEvent {
+        BridgeEvent.ProvenanceEvent, BridgeEvent.CoverageEvent,
+        BridgeEvent.CompletedEvent, BridgeEvent.ErrorEvent {
     int protocolVersion();
 
     record HelloEvent(int protocolVersion, List<String> capabilities) implements BridgeEvent {
@@ -118,6 +119,23 @@ public sealed interface BridgeEvent permits BridgeEvent.HelloEvent, BridgeEvent.
         public ProvenanceEvent {
             BridgeProtocol.requireVersion(protocolVersion);
             status = BridgeProtocol.requireText(status, "status", 64);
+            disclaimer = BridgeProtocol.requireText(disclaimer, "disclaimer", 512);
+        }
+    }
+
+    record CoverageEvent(int protocolVersion, int totalHunks, int measurableHunks,
+            int referencedHunks, List<BridgeCoverageHunk> hunks, String disclaimer) implements BridgeEvent {
+        public CoverageEvent {
+            if (protocolVersion != BridgeProtocol.VERSION_3) {
+                throw new IllegalArgumentException("Coverage requires bridge protocol 3");
+            }
+            BridgeProtocol.requireRange(totalHunks, 0, 256, "totalHunks");
+            BridgeProtocol.requireRange(measurableHunks, 0, totalHunks, "measurableHunks");
+            BridgeProtocol.requireRange(referencedHunks, 0, measurableHunks, "referencedHunks");
+            if (hunks == null || hunks.size() != totalHunks || hunks.stream().anyMatch(java.util.Objects::isNull)) {
+                throw new IllegalArgumentException("Coverage hunks are invalid");
+            }
+            hunks = List.copyOf(hunks);
             disclaimer = BridgeProtocol.requireText(disclaimer, "disclaimer", 512);
         }
     }

@@ -8,7 +8,8 @@ import java.util.Objects;
 public final class BridgeProtocol {
     public static final int VERSION_1 = 1;
     public static final int VERSION_2 = 2;
-    public static final int CURRENT_VERSION = VERSION_2;
+    public static final int VERSION_3 = 3;
+    public static final int CURRENT_VERSION = VERSION_3;
     /** Source-compatibility alias for the original bridge version. */
     public static final int VERSION = VERSION_1;
     public static final int MAX_LINE_BYTES = 256 * 1024;
@@ -19,7 +20,7 @@ public final class BridgeProtocol {
     }
 
     public static int requireSupportedVersion(int version) {
-        if (version != VERSION_1 && version != VERSION_2) {
+        if (version != VERSION_1 && version != VERSION_2 && version != VERSION_3) {
             throw new IllegalArgumentException("Unsupported bridge protocol version");
         }
         return version;

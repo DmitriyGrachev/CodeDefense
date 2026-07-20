@@ -96,7 +96,7 @@ class BridgeProveCommandTest {
             return 0;
         };
 
-        assertValidationError(runner, "--protocol", "3", "--staged");
+        assertValidationError(runner, "--protocol", "4", "--staged");
         assertValidationError(runner, "--protocol", "1");
         assertValidationError(runner, "--protocol", "1", "--staged", "--commit", "HEAD");
         assertValidationError(runner, "--protocol", "1", "--staged", "--focus", "free-form");

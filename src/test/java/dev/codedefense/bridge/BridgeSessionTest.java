@@ -30,17 +30,20 @@ class BridgeSessionTest {
     private final BridgeJsonCodec codec = new BridgeJsonCodec();
 
     @Test
-    void supportsOnlyProtocolVersionsOneAndTwo() {
-        assertEquals(BridgeProtocol.VERSION_2, BridgeProtocol.CURRENT_VERSION);
+    void supportsProtocolVersionsOneThroughThree() {
+        assertEquals(BridgeProtocol.VERSION_3, BridgeProtocol.CURRENT_VERSION);
         assertEquals(BridgeProtocol.VERSION_1,
                 new BridgeSession(InputStream.nullInputStream(), OutputStream.nullOutputStream()).protocolVersion());
         assertEquals(BridgeProtocol.VERSION_2,
                 new BridgeSession(InputStream.nullInputStream(), OutputStream.nullOutputStream(), 2)
                         .protocolVersion());
+        assertEquals(BridgeProtocol.VERSION_3,
+                new BridgeSession(InputStream.nullInputStream(), OutputStream.nullOutputStream(), 3)
+                        .protocolVersion());
         assertThrows(IllegalArgumentException.class,
                 () -> new BridgeSession(InputStream.nullInputStream(), OutputStream.nullOutputStream(), 0));
         assertThrows(IllegalArgumentException.class,
-                () -> new BridgeSession(InputStream.nullInputStream(), OutputStream.nullOutputStream(), 3));
+                () -> new BridgeSession(InputStream.nullInputStream(), OutputStream.nullOutputStream(), 4));
     }
 
     @Test

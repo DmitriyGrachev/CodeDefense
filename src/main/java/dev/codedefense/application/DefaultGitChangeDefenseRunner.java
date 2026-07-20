@@ -18,6 +18,7 @@ import dev.codedefense.domain.EmptyProjectSnapshotException;
 import dev.codedefense.domain.InterviewSession;
 import dev.codedefense.domain.ProjectSnapshot;
 import dev.codedefense.domain.CodexProvenanceSummary;
+import dev.codedefense.domain.EvidenceCoverageMap;
 import dev.codedefense.interview.InterviewCancelledException;
 import dev.codedefense.passport.*;
 import dev.codedefense.provenance.*;
@@ -147,10 +148,17 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
             CodeDefenseRuntime runtime = channel.runtime(runtimeProvider);
             var analysis = new AiGitChangeAnalyzer(runtime.stagedChangeAnalyzer())
                     .analyze(captured.change(), snapshot, focus);
+            Optional<EvidenceCoverageMap> coverage;
+            try {
+                coverage = Optional.of(new EvidenceCoverageCalculator().calculate(captured, analysis));
+            } catch (RuntimeException exception) {
+                coverage = Optional.empty();
+            }
+            channel.coveragePrepared(coverage);
             var interview = runtime.interviewRunner().conduct(analysis);
             if (interview != null) {
                 SavedChangePassport saved = passportServiceFactory.get()
-                        .createAndSave(selector, captured.change(), analysis, interview, focus, provenance);
+                        .createAndSave(selector, captured.change(), analysis, interview, focus, provenance, coverage);
                 channel.saved(saved, captured, interview);
             }
             channel.completed();
@@ -213,6 +221,7 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
         void dryRunCompleted(boolean provenanceRequested);
         void declined();
         CodeDefenseRuntime runtime(CodeDefenseRuntimeProvider provider);
+        void coveragePrepared(Optional<EvidenceCoverageMap> coverage);
         void saved(SavedChangePassport saved, CapturedGitChange captured, InterviewSession interview);
         void completed();
         int failure(String code, String message, int exitCode);
@@ -270,6 +279,8 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
             return provider.create(out);
         }
 
+        @Override public void coveragePrepared(Optional<EvidenceCoverageMap> coverage) { }
+
         @Override public void saved(SavedChangePassport saved, CapturedGitChange captured,
                 InterviewSession interview) {
             out.println("Change Passport saved: " + saved.path().getFileName());
@@ -294,17 +305,20 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
         private final BridgeSession bridge;
         private final boolean capabilityEnabled;
         private final boolean provenanceRequested;
+        private final dev.codedefense.bridge.BridgeEvidenceCoveragePublisher coveragePublisher;
 
         private StructuredChannel(BridgeSession bridge, boolean capabilityEnabled, boolean provenanceRequested) {
             this.bridge = bridge;
             this.capabilityEnabled = capabilityEnabled;
             this.provenanceRequested = provenanceRequested;
+            this.coveragePublisher = new dev.codedefense.bridge.BridgeEvidenceCoveragePublisher(bridge);
         }
 
         @Override public void begin() {
             java.util.ArrayList<String> capabilities = new java.util.ArrayList<>(
                     java.util.List.of("interactiveDefenseV1", "passportStatusV1"));
             if (capabilityEnabled) capabilities.add("codexProvenanceV1");
+            if (bridge.protocolVersion() >= BridgeProtocol.VERSION_3) capabilities.add("evidenceCoverageV1");
             bridge.emit(new BridgeEvent.HelloEvent(BridgeProtocol.VERSION, capabilities));
         }
 
@@ -344,7 +358,12 @@ public final class DefaultGitChangeDefenseRunner implements GitChangeDefenseRunn
         }
 
         @Override public CodeDefenseRuntime runtime(CodeDefenseRuntimeProvider provider) {
-            return provider.create(new BridgeInterviewInput(bridge), new BridgeInterviewOutput(bridge));
+            return provider.create(new BridgeInterviewInput(bridge),
+                    new BridgeInterviewOutput(bridge, coveragePublisher));
+        }
+
+        @Override public void coveragePrepared(Optional<EvidenceCoverageMap> coverage) {
+            coverage.ifPresent(coveragePublisher::prepare);
         }
 
         @Override public void saved(SavedChangePassport saved, CapturedGitChange captured,

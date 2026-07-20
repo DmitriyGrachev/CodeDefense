@@ -9,7 +9,7 @@
 
 CodeDefense is a local Java 21 application that turns an AI-assisted repository or exact Git change into an evidence-grounded technical defense. Instead of generating more code or producing another AI review, it asks the developer to explain decisions, counterfactuals, and predicted test behavior, computes the score locally, and binds a source-free Change Passport to the exact diff.
 
-![CodeDefense JetBrains Defense Cockpit showing a current Passport, evidence coverage, and repository learning history](docs/assets/codedefense-jetbrains-cockpit.png)
+![CodeDefense turns an exact staged change into a technical defense, Change Passport, and source-free CI continuity](docs/assets/devpost/01-hero.png)
 
 ## Why CodeDefense
 

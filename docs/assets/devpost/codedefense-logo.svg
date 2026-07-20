@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">CodeDefense logo</title>
+  <desc id="desc">A teal fingerprint inside code brackets with a violet check mark.</desc>
+  <rect width="1024" height="1024" rx="220" fill="#111820"/>
+  <g fill="none" stroke="#21d4bd" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M310 228H250c-50 0-82 32-82 82v146c0 42-21 70-62 84 41 14 62 42 62 84v90c0 50 32 82 82 82h60" stroke-width="48"/>
+    <path d="M714 228h60c50 0 82 32 82 82v146c0 42 21 70 62 84-41 14-62 42-62 84v90c0 50-32 82-82 82h-60" stroke-width="48"/>
+    <path d="M328 438c36-78 102-126 184-126s148 48 184 126" stroke-width="42"/>
+    <path d="M290 548c0-123 99-222 222-222s222 99 222 222" stroke-width="42"/>
+    <path d="M352 648c-19-30-28-63-28-100 0-104 84-188 188-188s188 84 188 188c0 37-9 70-28 100" stroke-width="42"/>
+    <path d="M420 682c-39-29-62-75-62-126 0-85 69-154 154-154s154 69 154 154c0 51-23 97-62 126" stroke-width="42"/>
+    <path d="M442 724c22 19 45 29 70 29s48-10 70-29" stroke-width="42"/>
+  </g>
+  <path d="M444 570l49 49 104-111" fill="none" stroke="#8b5cf6" stroke-width="50" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

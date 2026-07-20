@@ -208,6 +208,20 @@ class SwingCodeDefenseToolWindowViewTest {
     }
 
     @Test
+    void retryAvailabilityChangesOnlyTheExistingStartActionLabel() {
+        var view = new SwingCodeDefenseToolWindowView();
+        JButton start = named(view.component(), JButton.class, "codeDefense.startDefense");
+
+        view.setRetryAvailable(true);
+        assertEquals("Retry defense", start.getText());
+        assertEquals("Retry defense", start.getAccessibleContext().getAccessibleName());
+
+        view.setRetryAvailable(false);
+        assertEquals("Start defense", start.getText());
+        assertEquals("Start defense", start.getAccessibleContext().getAccessibleName());
+    }
+
+    @Test
     void rendersAccessibleTextForEveryGateStateWithoutUsingColorAsTheOnlySignal() {
         var view = new SwingCodeDefenseToolWindowView();
         JLabel badge = named(view.component(), JLabel.class, "codeDefense.gateBadge");

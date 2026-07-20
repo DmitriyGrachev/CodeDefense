@@ -66,6 +66,7 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         focus.setName("codeDefense.defenseFocus");
         focus.getAccessibleContext().setAccessibleName("Defense focus");
         preview.setName("codeDefense.previewDefense");
+        start.setName("codeDefense.startDefense");
         gateBadge.setName("codeDefense.gateBadge");
         gateSummary.setName("codeDefense.gateSummary");
         gateBadge.getAccessibleContext().setAccessibleName(
@@ -248,6 +249,11 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     @Override public void showCompleted(String value) { append(value); }
     @Override public void showError(String value) { append("Error: " + value); }
     @Override public void clearAnswer() { answer.setText(""); }
+    @Override public void setRetryAvailable(boolean available) {
+        String label = available ? "Retry defense" : "Start defense";
+        start.setText(label);
+        start.getAccessibleContext().setAccessibleName(label);
+    }
     @Override public void showPassportStatus(String value) {
         latestPassportStatus.setText(Objects.requireNonNull(value, "value"));
         latestPassportStatus.setCaretPosition(0);

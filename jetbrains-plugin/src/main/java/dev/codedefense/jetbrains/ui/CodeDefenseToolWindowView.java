@@ -20,6 +20,7 @@ public interface CodeDefenseToolWindowView {
     void showCompleted(String value);
     void showError(String value);
     void clearAnswer();
+    default void setRetryAvailable(boolean available) { }
     default void showPassportStatus(String value) { }
     default void showProvenance(String value) { }
     default void clearProvenanceConsent() { }

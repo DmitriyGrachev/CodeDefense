@@ -59,6 +59,7 @@ public final class CodeDefenseToolWindowController implements Disposable {
     private PendingProvenance pendingProvenance;
     private boolean provenanceCapabilitySeen;
     private boolean confirmationPending;
+    private boolean preserveEvidenceAfterFinish;
 
     CodeDefenseToolWindowController(CodeDefenseToolWindowView view, SessionLauncher launcher,
             BridgeLineCodec codec, Consumer<Runnable> edt) {
@@ -153,8 +154,10 @@ public final class CodeDefenseToolWindowController implements Disposable {
             }
             generation = ++sessionGeneration;
             starting = true;
+            preserveEvidenceAfterFinish = false;
         }
         uiCurrent(generation, () -> {
+            view.setRetryAvailable(false);
             view.clearEvidence();
             view.setSessionActive(true);
         });
@@ -179,10 +182,12 @@ public final class CodeDefenseToolWindowController implements Disposable {
                 synchronized (lock) {
                     if (generation != sessionGeneration) return;
                     starting = false;
+                    preserveEvidenceAfterFinish = false;
                     clearPendingProvenanceLocked();
                 }
                 uiCurrent(generation, () -> {
                     view.showError("CodeDefense could not be started.");
+                    view.setRetryAvailable(false);
                     view.clearEvidence();
                     view.setSessionActive(false);
                 });
@@ -223,12 +228,14 @@ public final class CodeDefenseToolWindowController implements Disposable {
             activeSession = null;
             starting = false;
             confirmationPending = false;
+            preserveEvidenceAfterFinish = false;
             clearPendingProvenanceLocked();
         }
         if (session != null) {
             session.cancel();
         }
         uiCurrent(generation, () -> {
+            view.setRetryAvailable(false);
             view.clearEvidence();
             view.setSessionActive(false);
         });
@@ -243,8 +250,14 @@ public final class CodeDefenseToolWindowController implements Disposable {
     }
 
     private void onEvent(long generation, BridgeMessage event) {
+        String errorCode = event.type().equals("error") ? event.text("code") : "";
         synchronized (lock) {
             if (generation != sessionGeneration || (!starting && activeSession == null)) return;
+            if (event.type().equals("completed")) {
+                preserveEvidenceAfterFinish = false;
+            } else if (event.type().equals("error") && !"INVALID_ANSWER".equals(errorCode)) {
+                preserveEvidenceAfterFinish = "INVALID_MODEL_RESPONSE".equals(errorCode);
+            }
         }
         if (event.type().equals("hello")) {
             boolean requested;
@@ -303,16 +316,21 @@ public final class CodeDefenseToolWindowController implements Disposable {
                 case "completed" -> {
                     view.showCompleted("Completed with exit code "
                             + event.integer("exitCode") + ". Codex invoked: " + event.bool("codexInvoked"));
+                    view.setRetryAvailable(false);
                     view.clearEvidence();
                 }
                 case "error" -> {
                     view.showError(safe(event.text("message")));
-                    if (!"INVALID_ANSWER".equals(event.text("code"))) {
+                    if ("INVALID_MODEL_RESPONSE".equals(errorCode)) {
+                        view.setRetryAvailable(true);
+                    } else if (!"INVALID_ANSWER".equals(errorCode)) {
+                        view.setRetryAvailable(false);
                         view.clearEvidence();
                     }
                 }
                 default -> {
                     view.showError("CodeDefense returned an unsupported bridge event.");
+                    view.setRetryAvailable(false);
                     view.clearEvidence();
                 }
             }
@@ -347,8 +365,11 @@ public final class CodeDefenseToolWindowController implements Disposable {
     }
 
     private void finish(long generation, Throwable failure) {
+        boolean preserveEvidence;
         synchronized (lock) {
             if (generation != sessionGeneration) return;
+            preserveEvidence = preserveEvidenceAfterFinish;
+            preserveEvidenceAfterFinish = false;
             activeSession = null;
             starting = false;
             confirmationPending = false;
@@ -358,7 +379,8 @@ public final class CodeDefenseToolWindowController implements Disposable {
             if (failure != null) {
                 view.showError("CodeDefense bridge execution failed.");
             }
-            view.clearEvidence();
+            if (!preserveEvidence) view.clearEvidence();
+            view.setRetryAvailable(preserveEvidence);
             view.setSessionActive(false);
         });
     }

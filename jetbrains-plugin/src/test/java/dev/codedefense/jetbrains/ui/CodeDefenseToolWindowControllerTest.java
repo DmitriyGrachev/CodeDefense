@@ -95,6 +95,47 @@ class CodeDefenseToolWindowControllerTest {
     }
 
     @Test
+    void invalidModelResponsePreservesEvidenceAndOffersFreshDefenseRetry() {
+        FakeView view = new FakeView();
+        SequencedLauncher launcher = new SequencedLauncher();
+        var controller = lifecycleController(view, launcher, Runnable::run);
+
+        controller.start(Selector.STAGED, null, "balanced");
+        launcher.event(0, question(false, "src/Current.java", 4, 5));
+        launcher.event(0, "{\"protocolVersion\":2,\"type\":\"error\","
+                + "\"code\":\"INVALID_MODEL_RESPONSE\","
+                + "\"message\":\"Codex returned an invalid response.\",\"exitCode\":9}\n");
+        launcher.sessions.getFirst().completion.complete(9);
+
+        assertEquals(List.of(new EvidenceLocationView("src/Current.java", 4, 5)), view.evidence);
+        assertTrue(view.retryAvailable);
+        assertFalse(view.active);
+
+        controller.start(Selector.STAGED, null, "balanced");
+
+        assertEquals(2, launcher.sessions.size());
+        assertFalse(view.retryAvailable);
+        assertTrue(view.evidence.isEmpty());
+        assertTrue(launcher.sessions.get(1).requests.isEmpty());
+    }
+
+    @Test
+    void ordinaryTerminalErrorStillClearsEvidenceAndDoesNotOfferRetry() {
+        FakeView view = new FakeView();
+        SequencedLauncher launcher = new SequencedLauncher();
+        var controller = lifecycleController(view, launcher, Runnable::run);
+
+        controller.start(Selector.STAGED, null, "balanced");
+        launcher.event(0, question(false, "src/Current.java", 4, 5));
+        launcher.event(0, "{\"protocolVersion\":2,\"type\":\"error\","
+                + "\"code\":\"CODEX_EXECUTION_FAILED\",\"message\":\"Safe failure\","
+                + "\"exitCode\":8}\n");
+
+        assertTrue(view.evidence.isEmpty());
+        assertFalse(view.retryAvailable);
+    }
+
+    @Test
     void previewStartsDryRunAndRendersTrustedMetadataWithoutConfirmation() {
         FakeView view = new FakeView();
         FakeLauncher launcher = new FakeLauncher();
@@ -530,6 +571,7 @@ class CodeDefenseToolWindowControllerTest {
         private boolean provenanceCleared;
         private boolean confirmationEnabled;
         private boolean stagedDefensePrepared;
+        private boolean retryAvailable;
         private List<EvidenceLocationView> evidence = List.of();
         private java.util.function.Function<EvidenceLocationView, EvidenceNavigator.NavigationResult>
                 evidenceOpener;
@@ -551,6 +593,7 @@ class CodeDefenseToolWindowControllerTest {
         @Override public void clearProvenanceConsent() { provenanceCleared = true; }
         @Override public void showProvenance(String value) { text.add(value); }
         @Override public void prepareStagedDefense() { stagedDefensePrepared = true; }
+        @Override public void setRetryAvailable(boolean available) { retryAvailable = available; }
         @Override public void showEvidence(List<EvidenceLocationView> locations,
                 java.util.function.Function<EvidenceLocationView, EvidenceNavigator.NavigationResult> opener) {
             evidence = List.copyOf(locations);

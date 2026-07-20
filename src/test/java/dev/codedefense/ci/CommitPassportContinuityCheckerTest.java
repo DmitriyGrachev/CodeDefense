@@ -49,6 +49,38 @@ class CommitPassportContinuityCheckerTest {
         assertEquals(1, CiPassportPolicy.REQUIRED.exitCode(result));
     }
 
+    @Test
+    void classifiesMergeCommitWithoutTrailerAsMissingInsteadOfUnavailable() throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve("merge-repo"));
+        git(root, "init");
+        git(root, "config", "user.email", "test@example.invalid");
+        git(root, "config", "user.name", "CodeDefense Test");
+        Files.writeString(root.resolve("base.txt"), "base\n");
+        git(root, "add", ".");
+        git(root, "commit", "-m", "base");
+        String base = git(root, "rev-parse", "HEAD").trim();
+        String baseBranch = git(root, "branch", "--show-current").trim();
+
+        git(root, "switch", "-c", "feature");
+        Files.writeString(root.resolve("feature.txt"), "feature\n");
+        git(root, "add", ".");
+        git(root, "commit", "-m", "feature");
+        git(root, "switch", baseBranch);
+        Files.writeString(root.resolve("main.txt"), "main\n");
+        git(root, "add", ".");
+        git(root, "commit", "-m", "main");
+        git(root, "merge", "--no-ff", "feature", "-m", "merge feature");
+
+        var checker = new CommitPassportContinuityChecker(
+                new GitCommitRangeReader(new JdkProcessExecutor()),
+                new GitCliChangeSource(new JdkProcessExecutor()), new PassportTrailerParser());
+        PassportContinuityResult result = checker.check(root, base, "HEAD");
+
+        assertEquals(List.of(CiPassportStatus.MISSING, CiPassportStatus.MISSING, CiPassportStatus.MISSING),
+                result.commits().stream().map(CommitContinuityResult::status).toList());
+        assertEquals(0, CiPassportPolicy.ADVISORY.exitCode(result));
+    }
+
     private static String git(Path root, String... arguments) throws Exception {
         java.util.ArrayList<String> command = new java.util.ArrayList<>(List.of("git", "-C", root.toString()));
         command.addAll(List.of(arguments));

@@ -18,7 +18,7 @@ class PluginMetadataTest {
         assertTrue(xml.contains("<depends>com.intellij.modules.platform</depends>"));
         assertTrue(xml.contains("<depends>Git4Idea</depends>"));
         assertTrue(xml.contains("serviceImplementation=\"dev.codedefense.jetbrains.gate.CodeDefenseProjectGateService\""));
-        assertTrue(xml.contains("preload=\"true\""));
+        assertFalse(xml.contains("preload="));
         assertTrue(xml.contains("since-build=\"261\""));
         assertTrue(xml.contains("until-build=\"262.*\""));
         assertTrue(xml.contains("factoryClass=\"dev.codedefense.jetbrains.ui.CodeDefenseToolWindowFactory\""));

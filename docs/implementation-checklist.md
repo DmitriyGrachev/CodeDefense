@@ -16,14 +16,14 @@
 - [x] Iteration 8.9 — portable source-free Change Handoff.
 - [x] Iteration 8.10 — evidence-grounded defense focus modes.
 - [x] Iteration 8.11 — JetBrains plugin over the local bridge protocol.
-- [ ] Iteration 8.12 — experimental consented Codex provenance.
-- [ ] Iteration 8.13 — live staged Passport gate and advisory IntelliJ commit check (implemented and offline-verified; Plugin Verifier and installed-plugin acceptance pending).
-- [ ] Iteration 8.14 — evidence navigator (implemented and offline-verified; Plugin Verifier and installed-plugin acceptance pending).
-- [ ] Iteration 8.15 — repository learning radar (implemented and offline-verified; Plugin Verifier and installed-plugin acceptance pending).
-- [ ] Iteration 8.16 — Passport-aware commit trailer and Cockpit polish (implemented and offline-verified; Plugin Verifier and installed-plugin acceptance pending).
-- [ ] Iteration 8.17 — Codex plugin, source-free skill, and advisory staged Passport Stop hook (implemented and offline-verified; installed-plugin and cross-platform launcher acceptance pending).
+- [ ] Iteration 8.12 — experimental consented Codex provenance (implemented behind an off-by-default kill switch; real-thread acceptance deferred from 0.1.0).
+- [x] Iteration 8.13 — live staged Passport gate and advisory IntelliJ commit check (Windows installed-plugin acceptance verified).
+- [ ] Iteration 8.14 — evidence navigator (implemented, offline-verified, and bundled; installed navigation acceptance deferred).
+- [x] Iteration 8.15 — repository learning radar (Windows installed-plugin rendering verified).
+- [x] Iteration 8.16 — Passport-aware commit trailer and Cockpit polish (Windows installed-plugin trailer attachment and CI continuity verified).
+- [x] Iteration 8.17 — Codex plugin, source-free skill, and advisory staged Passport Stop hook (Windows installed-plugin `UNDEFENDED`, `EXPIRED`, and `CURRENT` acceptance verified; POSIX launcher remains automated-only).
 - [x] Iteration 8.18 — Evidence Coverage Map (installed-plugin acceptance verified).
 - [x] Iteration 8.19 — GitHub Actions Passport continuity check (live pull-request Actions acceptance verified).
-- [ ] Iteration 9 — reliability, release documentation, and submission readiness.
+- [ ] Iteration 9 — release candidate packaging and documentation in progress; Devpost copy, video, and final link verification remain.
 
 Only the current approved iteration may be implemented. The detailed acceptance criteria are in the [master implementation plan](codedefense-mvp-implementation-plan.md).

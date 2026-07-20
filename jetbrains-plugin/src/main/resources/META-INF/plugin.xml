@@ -10,8 +10,7 @@
     <idea-version since-build="261" until-build="262.*"/>
     <resource-bundle>messages.CodeDefenseBundle</resource-bundle>
     <extensions defaultExtensionNs="com.intellij">
-        <projectService serviceImplementation="dev.codedefense.jetbrains.gate.CodeDefenseProjectGateService"
-                        preload="true"/>
+        <projectService serviceImplementation="dev.codedefense.jetbrains.gate.CodeDefenseProjectGateService"/>
         <checkinHandlerFactory implementation="dev.codedefense.jetbrains.gate.CodeDefenseCheckinHandlerFactory"/>
         <toolWindow id="CodeDefense"
                     anchor="right"

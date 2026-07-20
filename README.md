@@ -1,6 +1,26 @@
 # CodeDefense
 
-CodeDefense is a Java 21 command-line application that helps developers prove they understand an AI-assisted local codebase. It creates a privacy-aware, bounded repository snapshot and uses the locally authenticated Codex CLI for the technical-defense workflow.
+> **Prove that you understand your AI-assisted code.**
+
+[![Build](https://github.com/DmitriyGrachev/CodeDefense/actions/workflows/build.yml/badge.svg)](https://github.com/DmitriyGrachev/CodeDefense/actions/workflows/build.yml)
+[![Passport continuity](https://github.com/DmitriyGrachev/CodeDefense/actions/workflows/codedefense-passport.yml/badge.svg)](https://github.com/DmitriyGrachev/CodeDefense/actions/workflows/codedefense-passport.yml)
+[![Java 21](https://img.shields.io/badge/Java-21-ED8B00.svg)](https://adoptium.net/temurin/releases/?version=21)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+CodeDefense is a local Java 21 application that turns an AI-assisted repository or exact Git change into an evidence-grounded technical defense. Instead of generating more code or producing another AI review, it asks the developer to explain decisions, counterfactuals, and predicted test behavior, computes the score locally, and binds a source-free Change Passport to the exact diff.
+
+![CodeDefense JetBrains Defense Cockpit showing a current Passport, evidence coverage, and repository learning history](docs/assets/codedefense-jetbrains-cockpit.png)
+
+## Why CodeDefense
+
+AI coding assistants can produce a working change faster than its owner can explain it. A conventional review asks whether the code looks good; CodeDefense asks whether the developer understands the exact code they are about to keep.
+
+- **Evidence-grounded:** every primary question cites a selected file and line range or a bounded changed hunk.
+- **Adaptive:** a partial or incorrect answer can receive one focused follow-up.
+- **Change-bound:** a Passport becomes `EXPIRED` when the staged diff changes.
+- **Privacy-aware:** source is bounded, redacted, previewed, and sent only after confirmation.
+- **Local authority:** Java owns the state machine, final score, readiness, persistence, and CI comparison.
+- **Codex-native:** the CLI, JetBrains plugin, Codex skill/Stop hook, and GitHub Action share the same local boundaries.
 
 ## Requirements
 
@@ -10,12 +30,33 @@ CodeDefense is a Java 21 command-line application that helps developers prove th
 
 CodeDefense does not require or use an OpenAI API key. It analyzes local directories only: it does not ingest GitHub URLs, execute analyzed source code, use a web interface, or use a database.
 
+Verify the Java toolchain:
+
+```powershell
+java --version
+mvn --version
+```
+
+Both commands must resolve Java 21. On a clean machine, install a Temurin/OpenJDK 21 JDK and Maven through the operating system package manager or their official distributions, then reopen the terminal before continuing.
+
 Confirm the Codex prerequisite before a normal run:
 
 ```powershell
 codex --version
 codex login
 ```
+
+## Install a release
+
+Download `codedefense.jar` from the [latest GitHub release](https://github.com/DmitriyGrachev/CodeDefense/releases/latest), place it in any local directory, and verify the published SHA-256 value against `SHA256SUMS.txt`:
+
+```powershell
+Get-FileHash .\codedefense.jar -Algorithm SHA256
+java -jar .\codedefense.jar --version
+java -jar .\codedefense.jar --help
+```
+
+The release also contains the self-contained JetBrains and Codex plugin archives. Building from source remains available below.
 
 ## Build and run
 
@@ -39,6 +80,24 @@ java -jar target/codedefense.jar passport handoff create . --output change.cdhan
 ```
 
 `--dry-run` scans and previews the bounded snapshot without sending source content, invoking Codex, initializing the interactive terminal, or consuming credits. `--yes` bypasses confirmation and starts the structured analysis and interview through the locally authenticated Codex CLI. These requests consume Codex credits.
+
+## Architecture
+
+CodeDefense uses a small ports-and-adapters design. Picocli, JLine, Git, filesystem persistence, JetBrains, and process execution remain adapters around application and domain logic.
+
+```mermaid
+flowchart LR
+    CLI["CLI / Picocli"] --> APP["Application workflows"]
+    IDE["JetBrains plugin"] --> BRIDGE["Bounded NDJSON bridge"] --> APP
+    SKILL["Codex skill + Stop hook"] --> META["Source-free metadata commands"] --> APP
+    APP --> SCAN["Scanner + snapshot boundary"]
+    APP --> GIT["Bounded Git change capture"]
+    APP --> AI["AiProvider"] --> CODEX["Local Codex CLI"]
+    APP --> STORE["Reports + Passport receipts"]
+    CI["GitHub Action"] --> CHECK["Fingerprint continuity"] --> GIT
+```
+
+The model receives only explicitly confirmed bounded context. It proposes analysis, questions, evaluations, and report narrative through strict JSON schemas. Java validates all structured responses and remains authoritative for question count, follow-up limits, scoring, readiness, Passport identity, and persisted formats. See [the architecture notes](docs/architecture.md) for the dependency rule.
 
 ## Embedded sample project
 
@@ -170,6 +229,73 @@ Offline fixture compatibility is recorded in [the app-server compatibility matri
 
 CodeDefense selects at most 30 files and limits the snapshot to 120 KiB. It previews the selected relative paths before source content can be sent, excludes known secret and generated files, avoids symbolic links, and redacts common secret assignments as defense in depth. Repository content is treated as untrusted data: instructions found in source files, READMEs, comments, configuration, or generated text are not followed. Review the preview before confirming: redaction is not a guarantee that a repository contains no sensitive material.
 
+### Supported inputs and hard limits
+
+Whole-project scanning recognizes Java, Kotlin, Python, JavaScript/TypeScript, YAML, properties, TOML, and Markdown source/configuration files plus common build and application manifests such as `pom.xml`, Gradle settings, `package.json`, `pyproject.toml`, `requirements.txt`, `Dockerfile`, Compose files, and `application.*` configuration.
+
+| Boundary | Limit |
+|---|---:|
+| Selected files | 30 |
+| Snapshot sent to analysis | 120 KiB |
+| Read prefix per source candidate | 24 KiB |
+| Primary questions | exactly 3 |
+| Follow-ups | at most 1 per primary question |
+| GitHub CI commit range | 50 commits |
+
+Dependency/build/generated directories, archives, binaries, images, lock files, `.env` files, keys, certificates, final symlinks, and paths escaping the real project root are excluded. Secret redaction is defense in depth, not a substitute for reviewing the preview.
+
+## Testing
+
+The default test suites never call real Codex and require no OpenAI API key:
+
+```powershell
+mvn clean verify
+mvn package
+
+cd jetbrains-plugin
+.\gradlew.bat test verifyPlugin buildPlugin
+```
+
+GitHub Actions runs the Maven suite on Java 21 for both Ubuntu and Windows. A separate read-only Passport workflow checks commit-to-fingerprint continuity without invoking Codex or uploading Passport artifacts. Real Codex smoke tests are property-gated and manual only.
+
+## Troubleshooting
+
+| Symptom | Action |
+|---|---|
+| `java` or Maven uses an older JDK | Set `JAVA_HOME` to a Java 21 JDK, update `PATH`, and reopen the terminal. |
+| `Codex CLI was not found` | Install Codex, verify `codex --version`, then restart the terminal/IDE. |
+| Authentication is missing | Run `codex login` and confirm the same operating-system account launches CodeDefense. |
+| `No eligible changed source files were found` | Stage a supported source or manifest file; generated, binary, secret, symlink, and unsupported files are intentionally ignored. |
+| Passport is `EXPIRED` | The exact staged change moved after its defense. Preview and defend the current staged index again. |
+| IntelliJ reports an unsupported commit mode | Enable the Git staging area and commit the exact staged index; changelist commits are not claimed as verified. |
+| Plugin is incompatible | Use IntelliJ IDEA build `261.*` or `262.*` and install the ZIP produced by the current plugin build. |
+| Structured Codex response is invalid | Retry once only when desired; the application rejects malformed output rather than trusting partial JSON. |
+
+Expected failures are mapped to concise exit codes and should not print a Java stack trace. For diagnosis, reproduce first with `--dry-run`; that path does not invoke Codex.
+
+## How Codex and GPT-5.6 power the project
+
+The product uses the locally authenticated Codex CLI as its only AI runtime. GPT-5.6 Terra receives a bounded project snapshot or bounded Git hunk context and returns schema-constrained project analysis, three evidence-backed questions, answer evaluations, and optional report narrative. It cannot change the Java-owned final score, readiness, Passport identity, or CI result.
+
+Codex also accelerated development of CodeDefense itself: it helped turn review findings into focused regression tests, exercise Windows launcher and privacy boundaries, build deterministic Git fixtures, and iterate on the CLI/JetBrains/Codex adapters. Product decisions remained explicit and local—for example, fixed three-category defenses, bounded disclosure, source-free receipts, advisory rather than automatic merge approval, and an off-by-default provenance experiment.
+
+## Known MVP limitations and roadmap
+
+- Local repositories only; no GitHub URL ingestion, cloud service, accounts, or database.
+- CodeDefense does not execute analyzed source or tests and is not a security scanner.
+- Scores are educational signals, not identity, authorship, correctness, safety, merge, or deployment approval.
+- Secret detection is pattern-based and cannot guarantee that every sensitive value is removed.
+- The JetBrains release targets IntelliJ IDEA `261.*` and `262.*` on Windows; other JetBrains products and operating systems are not claimed.
+- The POSIX Codex plugin launcher is covered by automated contracts, but installed macOS/Linux acceptance remains pending.
+- Experimental Codex thread provenance is disabled by default and excluded from the 0.1.0 acceptance claim.
+- Passport trailers prove deterministic fingerprint continuity only; they are not signed and can be forged.
+
+After the hackathon release, likely work is limited to user feedback, additional installed-platform acceptance, and deciding whether signed/source-free team handoffs are valuable. CodeDefense will not become a code generator, employee-ranking system, or automatic approval gate.
+
+## License
+
+CodeDefense is available under the [MIT License](LICENSE).
+
 ## Codex launcher support
 
 - **Windows native installation:** `codex.exe` available through `PATH`.
@@ -244,6 +370,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter. Iteration 8.12 is implemented behind an off-by-default kill switch and remains unchecked until a separately authorized real-thread acceptance read. Iterations 8.13-8.18 implement the live staged Passport gate, advisory pre-commit check, evidence navigator, repository Learning Radar, explicit source-free commit trailer, responsive Defense Cockpit, repository-local Codex plugin, and Evidence Coverage Map. Iteration 8.19 adds advisory/required GitHub Actions Passport continuity. These additions are offline-verified; platform acceptance remains tracked in the checklist. Final Iteration 9 remains future work.
+The 0.1.0 release candidate includes the executable CLI, bounded Codex adapter, adaptive interview, reports, embedded sample, exact-change Passports, command center, commit/range defense, attempt timelines, portable source-free handoffs, focus modes, JetBrains Defense Cockpit, advisory commit integration, repository Learning Radar, Codex skill/Stop hook, Evidence Coverage Map, and GitHub Actions Passport continuity. Experimental provenance remains off by default and outside the release acceptance claim. Video, Devpost copy, and final submission-link verification remain tracked as the last Iteration 9 activities.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

@@ -44,6 +44,7 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     private final JButton accept = new JButton("Send bounded source");
     private final JButton decline = new JButton("Decline");
     private final JTextArea output = new JTextArea();
+    private final JTextArea latestPassportStatus = new JTextArea("No Passport");
     private final JPanel evidencePanel = new JPanel();
     private final JPanel evidenceSection = new JPanel();
     private final LearningRadarPanel learningRadar = new LearningRadarPanel();
@@ -72,6 +73,12 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         gateSummary.getAccessibleContext().setAccessibleName("Status unavailable");
         output.setName("codeDefense.sessionOutput");
         output.getAccessibleContext().setAccessibleName("Defense session output");
+        latestPassportStatus.setName("codeDefense.latestPassportStatus");
+        latestPassportStatus.setEditable(false);
+        latestPassportStatus.setLineWrap(true);
+        latestPassportStatus.setWrapStyleWord(true);
+        latestPassportStatus.setOpaque(false);
+        latestPassportStatus.getAccessibleContext().setAccessibleName("Latest saved Passport");
         answer.setName("codeDefense.answer");
         answer.getAccessibleContext().setAccessibleName("Answer to the current question");
         evidencePanel.setName("codeDefense.evidencePanel");
@@ -139,6 +146,13 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         provenanceControls.setVisible("true".equalsIgnoreCase(
                 System.getenv("CODEDEFENSE_EXPERIMENTAL_CODEX_PROVENANCE")));
 
+        JPanel latestPassport = new JPanel(new BorderLayout(4, 4));
+        latestPassport.setName("codeDefense.latestPassport");
+        JLabel latestPassportLabel = new JLabel("Latest saved Passport:");
+        latestPassportLabel.setLabelFor(latestPassportStatus);
+        latestPassport.add(latestPassportLabel, BorderLayout.WEST);
+        latestPassport.add(latestPassportStatus, BorderLayout.CENTER);
+
         JPanel north = new JPanel();
         north.setName("codeDefense.cockpitHeader");
         north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
@@ -146,6 +160,7 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
         north.add(selectors);
         north.add(sessionActions);
         north.add(repositoryActions);
+        north.add(latestPassport);
         north.add(provenanceControls);
         root.add(north, BorderLayout.NORTH);
 
@@ -233,7 +248,10 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     @Override public void showCompleted(String value) { append(value); }
     @Override public void showError(String value) { append("Error: " + value); }
     @Override public void clearAnswer() { answer.setText(""); }
-    @Override public void showPassportStatus(String value) { append("Passport: " + value); }
+    @Override public void showPassportStatus(String value) {
+        latestPassportStatus.setText(Objects.requireNonNull(value, "value"));
+        latestPassportStatus.setCaretPosition(0);
+    }
     @Override public void showProvenance(String value) { append("Experimental Codex provenance: " + value); }
     @Override public void clearProvenanceConsent() {
         threadId.setText(""); historyConsent.setSelected(false); provenance.setSelected(false);

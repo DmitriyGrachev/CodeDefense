@@ -23,6 +23,7 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
@@ -175,6 +176,35 @@ class SwingCodeDefenseToolWindowViewTest {
                 "codeDefense.sessionOutput").getAccessibleContext().getAccessibleName());
         assertEquals("Answer to the current question", named(view.component(), javax.swing.JTextField.class,
                 "codeDefense.answer").getAccessibleContext().getAccessibleName());
+    }
+
+    @Test
+    void latestPassportRefreshReplacesStatusWithoutAppendingToSessionOutput() {
+        var view = new SwingCodeDefenseToolWindowView();
+
+        view.showPassportStatus("CURRENT | COMMIT | first | balanced | attempt 1");
+        view.showPassportStatus("CURRENT | COMMIT | second | balanced | attempt 2");
+
+        JTextArea status = named(view.component(), JTextArea.class,
+                "codeDefense.latestPassportStatus");
+        JTextArea session = named(view.component(), JTextArea.class,
+                "codeDefense.sessionOutput");
+        assertEquals("CURRENT | COMMIT | second | balanced | attempt 2", status.getText());
+        assertEquals("", session.getText());
+    }
+
+    @Test
+    void stagedGateAndLatestPassportRemainSeparate() {
+        var view = new SwingCodeDefenseToolWindowView();
+        view.showGateStatus(new StagedGateView(1, StagedGateView.State.UNDEFENDED,
+                StagedGateView.Reason.NO_STAGED_HISTORY, "a".repeat(64),
+                0, 1, 4, 0, List.of()));
+        view.showPassportStatus("CURRENT | COMMIT | 6482a10a90f1 | balanced | attempt 2");
+
+        assertEquals("UNDEFENDED", named(view.component(), JLabel.class,
+                "codeDefense.gateBadge").getText());
+        assertTrue(named(view.component(), JTextArea.class,
+                "codeDefense.latestPassportStatus").getText().contains("CURRENT | COMMIT"));
     }
 
     @Test

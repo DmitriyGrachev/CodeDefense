@@ -1,6 +1,6 @@
 # CodeDefense
 
-> **Prove that you understand your AI-assisted code.**
+> **Turn AI-generated code into developer-owned understanding.**
 
 [![Build](https://github.com/DmitriyGrachev/CodeDefense/actions/workflows/build.yml/badge.svg)](https://github.com/DmitriyGrachev/CodeDefense/actions/workflows/build.yml)
 [![Passport continuity](https://github.com/DmitriyGrachev/CodeDefense/actions/workflows/codedefense-passport.yml/badge.svg)](https://github.com/DmitriyGrachev/CodeDefense/actions/workflows/codedefense-passport.yml)
@@ -57,6 +57,18 @@ java -jar .\codedefense.jar --help
 ```
 
 The release also contains the self-contained JetBrains and Codex plugin archives. Building from source remains available below.
+
+## 60-second model-free evaluation
+
+Judges and first-time users can verify the packaged CLI without Codex credentials or a model request:
+
+```powershell
+java -jar .\codedefense.jar --version
+java -jar .\codedefense.jar --help
+java -jar .\codedefense.jar sample --dry-run
+```
+
+The dry run sends no source content, makes no model request, and consumes no credits. See the [complete judge guide](docs/devpost/README-JUDGES.md) for the staged-change, JetBrains, Codex plugin, and CI paths.
 
 ## Build and run
 

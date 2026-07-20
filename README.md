@@ -101,6 +101,8 @@ java -jar target/codedefense.jar passport export . --format json --output passpo
 java -jar target/codedefense.jar passport timeline .
 java -jar target/codedefense.jar passport insights . --format json --limit 20
 java -jar target/codedefense.jar passport show . --format json
+java -jar target/codedefense.jar passport coverage . --format json
+java -jar target/codedefense.jar passport ci-check --base main --head HEAD --policy advisory .
 ```
 
 User-supplied commit and range refs are resolved once to immutable commit IDs before any diff capture. CodeDefense then uses bounded unified hunks, literal pathspecs, disabled external diff/textconv, and no shell command strings. It ignores unstaged working-tree content, previews the bounded redacted context, and requires explicit confirmation. Every `prove ... --dry-run` sends no source content and invokes no Codex.
@@ -117,7 +119,19 @@ Portable handoffs use `passport handoff create`, `inspect`, and `match`. A `.cdh
 
 Staged source context is built from bounded unified hunks for at most 30 deterministically prioritized supported files. Repository paths are passed to Git as literal pathspecs, and HEAD/index identity is checked again after initial capture; if it changed, CodeDefense aborts and asks you to retry. Exact renames retain both old and new paths. A pure rename with no changed source lines is intentionally not enough to start a defense, and unchanged whole-file content is not sent as an artificial addition.
 
-Passports and proof output exclude staged source, diffs, blobs, answers, raw model JSON, expected key points, and evidence reasons. JSON receipts are educational records, not approval to merge or deploy. The optional experiment below adds narrowly bounded local app-server matching; the default proof mode still performs no session matching. Neither mode adds browser integration, GitHub/PR/CI/signing/cloud/dashboard integration.
+Passports and proof output exclude staged source, diffs, blobs, answers, raw model JSON, expected key points, and evidence reasons. JSON receipts are educational records, not approval to merge or deploy. The optional experiment below adds narrowly bounded local app-server matching; the default proof mode still performs no session matching. Neither mode adds browser integration, GitHub API access, signing, cloud storage, or a dashboard.
+
+### Evidence Coverage Map
+
+Iteration 8.18 records which bounded changed hunks were referenced by the three primary defense questions. `passport coverage .` renders the latest current map in text or deterministic JSON. The IntelliJ bridge protocol 3 streams cumulative coverage after each primary question and shows a separate **Evidence Coverage** card with clickable hunk locations; unreferenced measurable hunks appear first.
+
+Coverage is an evidence-use signal, not correctness, safety, or test coverage. It never changes the Java-owned score or readiness. The persisted sidecar contains only the exact Passport fingerprint, portable relative paths, hunk ordinals/ranges, reference state, and fixed category IDs. It contains no source, diff text, question text, answers, feedback, reasons, raw model output, or absolute paths.
+
+### GitHub Actions Passport continuity
+
+Iteration 8.19 adds the source-free, model-free `passport ci-check` command and an advisory example workflow at `.github/workflows/codedefense-passport.yml`. The workflow checks out full history, builds with Java 21, compares each final `CodeDefense-Passport: sha256:<hash>` commit trailer with the deterministic parent-to-commit fingerprint, and writes a bounded summary to the GitHub Step Summary. It uses `contents: read`, invokes no Codex process, uses no API key, and uploads no repository content or Passport artifact.
+
+`--policy advisory` returns success for matched, missing, and mismatched trailers while still reporting them. `--policy required` returns success only when every checked commit matches. Both policies fail when history cannot be checked safely. Ranges are limited to 50 non-root, non-merge commits; shallow or unavailable history is rejected. Trailer possession is not authentication and can be forged. Fingerprint continuity is not identity, correctness, safety, merge approval, or deployment approval.
 
 ### Live staged Passport gate
 
@@ -192,7 +206,7 @@ The bundled POSIX launcher contract is covered offline, but actual launcher acce
 
 Iteration 8.11 adds a Windows-first CodeDefense Tool Window for IntelliJ IDEA 2026.1 Community and Ultimate modes. The plugin is a passive adapter: it launches the bundled shaded CLI JAR as a child Java process and exchanges bounded, versioned NDJSON over stdin/stdout. Git capture, privacy filtering, Codex access, question generation, scoring, and Passport persistence remain in the CLI. The plugin does not read project source, run Git itself, parse Passport Markdown, or place answers and model text in IDE logs or settings.
 
-Iteration 8.14 extends that bridge with protocol 2 evidence navigation. Primary questions carry only one to ten validated portable relative paths and line ranges; follow-ups carry no new evidence. The bridge never includes source snippets, evidence reasons, expected key points, or absolute paths. Protocol 1 remains compatible, and an override CLI that cleanly rejects protocol 2 before any valid bridge event or possible Codex invocation is retried once with protocol 1. There is no fallback after a bridge event, confirmation, question, or any other point where source could have been sent.
+Iteration 8.14 extends that bridge with protocol 2 evidence navigation, and Iteration 8.18 adds protocol 3 cumulative Evidence Coverage events. Primary questions carry only one to ten validated portable relative paths and line ranges; follow-ups carry no new evidence. The bridge never includes source snippets, evidence reasons, expected key points, or absolute paths. Protocols 1 and 2 remain decodable, and a CLI that cleanly rejects protocol 3 before any valid bridge event or possible Codex invocation is retried once with protocol 1. There is no fallback after a bridge event, confirmation, question, or any other point where source could have been sent.
 
 Evidence links are resolved against the real project root before IntelliJ sees the file. Absolute paths, parent traversal, control characters, missing or unreadable files, directories, final symlinks, intermediate symlinks, paths outside the real root, and stale line ranges are not opened. IntelliJ resolves the `VirtualFile` only after those checks and opens a valid location at its cited line without reading or displaying source through the bridge.
 
@@ -230,6 +244,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter. Iteration 8.12 is implemented behind an off-by-default kill switch and remains unchecked until a separately authorized real-thread acceptance read. Iterations 8.13-8.16 implement the live staged Passport gate, advisory pre-commit check, evidence navigator, repository Learning Radar, explicit source-free commit trailer, and responsive Defense Cockpit. They are offline-verified but remain unchecked until exact Plugin Verifier and installed-plugin acceptance are complete. Final Iteration 9 remains future work.
+Iterations 0-8.10 provide the executable local defense workflow, bounded Codex adapter, adaptive interview, reports, embedded sample, Git Change Passports, command center, commit/range capture, change-scoped attempt timelines, portable source-free handoffs, defense focus modes, and machine-readable local status. Iteration 8.11 adds the IntelliJ IDEA adapter. Iteration 8.12 is implemented behind an off-by-default kill switch and remains unchecked until a separately authorized real-thread acceptance read. Iterations 8.13-8.18 implement the live staged Passport gate, advisory pre-commit check, evidence navigator, repository Learning Radar, explicit source-free commit trailer, responsive Defense Cockpit, repository-local Codex plugin, and Evidence Coverage Map. Iteration 8.19 adds advisory/required GitHub Actions Passport continuity. These additions are offline-verified; platform acceptance remains tracked in the checklist. Final Iteration 9 remains future work.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

@@ -23,6 +23,7 @@ import picocli.CommandLine;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,7 +41,8 @@ class CliFoundationTest {
         assertTrue(help.contains("report"));
         assertTrue(help.contains("prove"));
         assertTrue(help.contains("passport"));
-        assertTrue(!help.contains("bridge"));
+        assertFalse(help.contains("bridge"));
+        assertFalse(help.contains("codex-hook"));
     }
 
     @Test
@@ -53,6 +55,17 @@ class CliFoundationTest {
         assertTrue(commandLine.getSubcommands().containsKey("prove"));
         assertTrue(commandLine.getSubcommands().containsKey("passport"));
         assertTrue(commandLine.getSubcommands().containsKey("bridge"));
+        assertTrue(commandLine.getSubcommands().containsKey("codex-hook"));
+    }
+
+    @Test
+    void hiddenCodexHookHelpIsAvailableWithoutAppearingInRootHelp() {
+        CommandLine commandLine = CodeDefenseApplication.createCommandLine();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        commandLine.setOut(new PrintWriter(output, true, StandardCharsets.UTF_8));
+
+        assertEquals(ExitCodes.SUCCESS, commandLine.execute("codex-hook", "status", "--help"));
+        assertTrue(output.toString(StandardCharsets.UTF_8).contains("source-free staged Passport status"));
     }
 
     @Test

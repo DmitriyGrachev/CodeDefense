@@ -1,15 +1,9 @@
 package dev.codedefense.cli;
 
-import dev.codedefense.ai.JdkProcessExecutor;
-import dev.codedefense.application.EvaluateStagedPassportGateUseCase;
-import dev.codedefense.change.GitCliStagedChangeSource;
-import dev.codedefense.passport.ChangePassportPaths;
-import dev.codedefense.passport.FileSystemChangePassportStore;
-import dev.codedefense.passport.MarkdownChangePassportRenderer;
+import dev.codedefense.application.StagedPassportGateEvaluator;
 import dev.codedefense.passport.StagedPassportGateJsonCodec;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
@@ -22,7 +16,7 @@ import picocli.CommandLine.Model.CommandSpec;
 @Command(name = "gate", mixinStandardHelpOptions = true, version = "CodeDefense 0.1.0",
         description = "Evaluate the exact staged Git index against local Change Passports.")
 public final class PassportGateCommand implements Callable<Integer> {
-    private final EvaluateStagedPassportGateUseCase useCase;
+    private final StagedPassportGateEvaluator useCase;
     private final StagedPassportGateJsonCodec codec;
 
     @Option(names = "--staged", required = true,
@@ -41,10 +35,10 @@ public final class PassportGateCommand implements Callable<Integer> {
     private CommandSpec commandSpec;
 
     public PassportGateCommand() {
-        this(production(), new StagedPassportGateJsonCodec());
+        this(StagedPassportGateRuntimeFactory.create(), new StagedPassportGateJsonCodec());
     }
 
-    PassportGateCommand(EvaluateStagedPassportGateUseCase useCase, StagedPassportGateJsonCodec codec) {
+    PassportGateCommand(StagedPassportGateEvaluator useCase, StagedPassportGateJsonCodec codec) {
         this.useCase = Objects.requireNonNull(useCase, "useCase");
         this.codec = Objects.requireNonNull(codec, "codec");
     }
@@ -59,11 +53,5 @@ public final class PassportGateCommand implements Callable<Integer> {
         commandSpec.commandLine().getOut().print(new String(output, StandardCharsets.UTF_8));
         commandSpec.commandLine().getOut().flush();
         return ExitCodes.SUCCESS;
-    }
-
-    private static EvaluateStagedPassportGateUseCase production() {
-        return new EvaluateStagedPassportGateUseCase(new GitCliStagedChangeSource(new JdkProcessExecutor()),
-                new FileSystemChangePassportStore(ChangePassportPaths.defaults(),
-                        new MarkdownChangePassportRenderer(), Clock.systemUTC()));
     }
 }

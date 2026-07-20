@@ -92,9 +92,10 @@ class JdkProcessExecutorTest {
     @Test
     void returnsDefensiveBoundedStdoutBytesAfterDrainingTheChildStream() {
         ProcessResult result = new JdkProcessExecutor().execute(
-                spec("echo", "x".repeat(1024 * 1024), 3, 1024, Duration.ofSeconds(3), Map.of()));
+                spec("echo", "x".repeat(1024 * 1024), 3, 1024, Duration.ofSeconds(10), Map.of()));
 
         byte[] first = result.stdoutBytes();
+        assertEquals(3, first.length);
         first[0] = 'z';
 
         assertEquals("xxx", result.stdout());

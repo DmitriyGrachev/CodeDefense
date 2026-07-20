@@ -12,12 +12,19 @@ import java.util.Objects;
 public final class BoundedTextFileReader {
     public ReadResult read(Path root, Path candidate, int limit) {
         Objects.requireNonNull(root); Objects.requireNonNull(candidate);
-        Path normalizedRoot;
-        try { normalizedRoot = root.toRealPath(); } catch (IOException exception) { return ReadResult.unavailable("unreadable project root"); }
+        Path logicalRoot = root.toAbsolutePath().normalize();
         Path file = candidate.toAbsolutePath().normalize();
-        if (!file.startsWith(normalizedRoot)) return ReadResult.unavailable("outside project root");
-        try { if (file.getParent() == null || !file.getParent().toRealPath().startsWith(normalizedRoot)) return ReadResult.unavailable("outside project root"); }
-        catch (IOException exception) { return ReadResult.unavailable("unreadable parent path"); }
+        if (!file.startsWith(logicalRoot)) return ReadResult.unavailable("outside project root");
+        Path realRoot;
+        try { realRoot = root.toRealPath(); }
+        catch (IOException exception) { return ReadResult.unavailable("unreadable project root"); }
+        Path realParent;
+        try {
+            if (file.getParent() == null) return ReadResult.unavailable("outside project root");
+            realParent = file.getParent().toRealPath();
+            if (!realParent.startsWith(realRoot)) return ReadResult.unavailable("outside project root");
+            file = realParent.resolve(file.getFileName());
+        } catch (IOException exception) { return ReadResult.unavailable("unreadable parent path"); }
         if (limit < 0 || Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return ReadResult.unavailable("not a regular file");
         try (var input = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
             byte[] bytes = input.readNBytes(limit + 1);

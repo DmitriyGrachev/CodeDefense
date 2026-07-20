@@ -150,7 +150,10 @@ class UnderstandingReportServiceTest {
             calls++;
             saved = report;
             if (failure != null) throw failure;
-            result = new SavedReport(Path.of("C:/reports/latest.md"), report.narrativeSource());
+            result = new SavedReport(
+                    Path.of(System.getProperty("java.io.tmpdir"), "codedefense-tests", "latest.md")
+                            .toAbsolutePath().normalize(),
+                    report.narrativeSource());
             return result;
         }
         @Override public Optional<String> readLatest() { return Optional.empty(); }

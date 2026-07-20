@@ -11,8 +11,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.codedefense.jetbrains.gate.StagedGateView;
 import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
 import dev.codedefense.jetbrains.process.EvidenceLocationView;
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.util.List;
@@ -22,6 +24,7 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 
 class SwingCodeDefenseToolWindowViewTest {
@@ -104,6 +107,74 @@ class SwingCodeDefenseToolWindowViewTest {
 
         assertSame(preview.getParent(), start.getParent());
         assertNotSame(change.getParent(), preview.getParent());
+    }
+
+    @Test
+    void cockpitGroupsLiveGateControlsSessionEvidenceAndLearningRadar() {
+        var view = new SwingCodeDefenseToolWindowView();
+
+        JPanel header = named(view.component(), JPanel.class, "codeDefense.cockpitHeader");
+        JPanel gate = named(view.component(), JPanel.class, "codeDefense.liveGate");
+        JPanel selectors = named(view.component(), JPanel.class, "codeDefense.defenseSelectors");
+        JPanel session = named(view.component(), JPanel.class, "codeDefense.sessionArea");
+        JPanel evidence = named(view.component(), JPanel.class, "codeDefense.evidenceSection");
+        JPanel radar = named(view.component(), JPanel.class, "codeDefense.learningRadar");
+        JPanel body = named(view.component(), JPanel.class, "codeDefense.cockpitBody");
+        JPanel confirmation = named(view.component(), JPanel.class, "codeDefense.confirmationActions");
+
+        assertSame(header, gate.getParent());
+        assertSame(header, selectors.getParent());
+        assertTrue(SwingUtilities.isDescendingFrom(evidence, session));
+        assertTrue(SwingUtilities.isDescendingFrom(confirmation, session));
+        assertSame(body, session.getParent());
+        assertSame(body, radar.getParent());
+        BorderLayout bodyLayout = (BorderLayout) body.getLayout();
+        assertEquals(BorderLayout.CENTER, bodyLayout.getConstraints(session));
+        assertEquals(BorderLayout.SOUTH, bodyLayout.getConstraints(radar));
+        assertEquals("CodeDefense live staged Passport gate",
+                gate.getAccessibleContext().getAccessibleName());
+        assertEquals("CodeDefense defense session",
+                session.getAccessibleContext().getAccessibleName());
+        assertEquals("Evidence for the current question",
+                evidence.getAccessibleContext().getAccessibleName());
+        assertEquals("One-shot source confirmation",
+                confirmation.getAccessibleContext().getAccessibleName());
+    }
+
+    @Test
+    void allCockpitActionsRemainReachableAtSixHundredPixels() {
+        var view = new SwingCodeDefenseToolWindowView();
+        JComponent root = view.component();
+        root.setSize(600, 800);
+        layoutTree(root);
+
+        for (String label : List.of(
+                "Preview defense", "Start defense", "Cancel", "Refresh",
+                "Defend staged change", "Open Passport", "Send bounded source",
+                "Decline", "Answer", "Skip")) {
+            JButton action = find(root, JButton.class, label);
+            Rectangle bounds = SwingUtilities.convertRectangle(action.getParent(), action.getBounds(), root);
+            assertTrue(bounds.x >= 0 && bounds.x + bounds.width <= root.getWidth(),
+                    () -> label + " is clipped horizontally at 600 pixels: " + bounds);
+            assertTrue(action.getY() + action.getHeight() <= action.getParent().getHeight(),
+                    () -> label + " wrapped outside its responsive action row");
+            assertTrue(action.isFocusable(), () -> label + " must remain keyboard reachable");
+            assertEquals(label, action.getAccessibleContext().getAccessibleName());
+        }
+    }
+
+    @Test
+    void selectorsSessionOutputAndAnswerHaveAccessibleNames() {
+        var view = new SwingCodeDefenseToolWindowView();
+
+        assertEquals("Change kind", named(view.component(), JComboBox.class,
+                "codeDefense.changeSelector").getAccessibleContext().getAccessibleName());
+        assertEquals("Defense focus", named(view.component(), JComboBox.class,
+                "codeDefense.defenseFocus").getAccessibleContext().getAccessibleName());
+        assertEquals("Defense session output", named(view.component(), javax.swing.JTextArea.class,
+                "codeDefense.sessionOutput").getAccessibleContext().getAccessibleName());
+        assertEquals("Answer to the current question", named(view.component(), javax.swing.JTextField.class,
+                "codeDefense.answer").getAccessibleContext().getAccessibleName());
     }
 
     @Test
@@ -210,5 +281,12 @@ class SwingCodeDefenseToolWindowViewTest {
             for (Component child : container.getComponents()) text.append(componentText(child));
         }
         return text.toString();
+    }
+
+    private void layoutTree(Container container) {
+        container.doLayout();
+        for (Component child : container.getComponents()) {
+            if (child instanceof Container nested) layoutTree(nested);
+        }
     }
 }

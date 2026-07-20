@@ -32,7 +32,7 @@
 **Interfaces:**
 - Produces: `PassportTrailerResult apply(String commitMessage, String diffFingerprint)`.
 
-- [ ] **Step 1: Write RED table-driven tests**
+- [x] **Step 1: Write RED table-driven tests**
 
 Cover:
 
@@ -55,18 +55,18 @@ public record PassportTrailerResult(Status status, String commitMessage) {
 }
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 cd jetbrains-plugin
 .\gradlew.bat test --tests "dev.codedefense.jetbrains.commit.PassportCommitTrailerTest" --console=plain
 ```
 
-- [ ] **Step 3: Implement strict line-oriented mutation**
+- [x] **Step 3: Implement strict line-oriented mutation**
 
 Validate `[0-9a-f]{64}`. Match only complete lines beginning exactly `CodeDefense-Passport:`. Preserve every original character and ensure one blank line before the appended trailer using the message's first existing line-ending style (LF when none exists). Return a new string; do not mutate UI here.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run the same focused Gradle command.
 
@@ -82,7 +82,7 @@ Run the same focused Gradle command.
 - Consumes: fresh `StagedGateView.diffFingerprint()`.
 - Produces: an unchecked `RefreshableOnComponent`/public checkin configuration component.
 
-- [ ] **Step 1: Write RED consent tests**
+- [x] **Step 1: Write RED consent tests**
 
 Assert:
 
@@ -97,11 +97,11 @@ Assert:
 - a new commit attempt is unchecked even after the previous one selected it.
 - mutation between the first fresh result and the final trailer recheck cancels the commit and appends nothing.
 
-- [ ] **Step 2: Implement explicit option and handler integration**
+- [x] **Step 2: Implement explicit option and handler integration**
 
 Use `CheckinProjectPanel.getCommitMessage()` and `setCommitMessage(String)` only after the fresh gate check. If the option is selected, perform a second immediate gate check after calculating the candidate message and before setting it; append only when both fresh results are `CURRENT` with the same full identity/fingerprint. Otherwise cancel with a safe stale-index message. This narrows the unavoidable external-process race to the final IntelliJ commit handoff and never claims cryptographic atomicity. Keep the full fingerprint out of notifications and ordinary Tool Window status; display only the existing 12-character form there.
 
-- [ ] **Step 3: Run handler tests**
+- [x] **Step 3: Run handler tests**
 
 ```powershell
 .\gradlew.bat test --tests "dev.codedefense.jetbrains.commit.*" --tests "dev.codedefense.jetbrains.gate.*" --console=plain
@@ -118,7 +118,7 @@ Use `CheckinProjectPanel.getCommitMessage()` and `setCommitMessage(String)` only
 - Consumes: live gate status, session/evidence state, and learning insights.
 - Produces: one cohesive accessible Tool Window.
 
-- [ ] **Step 1: Add RED layout/accessibility tests**
+- [x] **Step 1: Add RED layout/accessibility tests**
 
 Assert component hierarchy and accessible names for:
 
@@ -131,11 +131,11 @@ Assert component hierarchy and accessible names for:
 - all actions remain reachable at 600-pixel width;
 - status is communicated through text, not color alone.
 
-- [ ] **Step 2: Implement minimal standard-Swing layout**
+- [x] **Step 2: Implement minimal standard-Swing layout**
 
 Use nested `BoxLayout`/`BorderLayout`, existing IntelliJ theme colors where public, and standard components. Do not add a UI framework or custom painting beyond progress bars. Preserve current output text and keyboard focus order.
 
-- [ ] **Step 3: Run full plugin tests/build**
+- [x] **Step 3: Run full plugin tests/build**
 
 ```powershell
 .\gradlew.bat clean test buildPlugin --rerun-tasks --console=plain
@@ -148,7 +148,7 @@ Use nested `BoxLayout`/`BorderLayout`, existing IntelliJ theme colors where publ
 - Modify: `docs/implementation-checklist.md`
 - Modify: all four 8.13–8.16 plan checkboxes only where evidence exists
 
-- [ ] **Step 1: Run core verification and safe JAR acceptance**
+- [x] **Step 1: Run core verification and safe JAR acceptance**
 
 ```powershell
 mvn clean verify
@@ -194,3 +194,16 @@ git commit -m "feat: attach Passport fingerprints to commits"
 ```
 
 Stop before Iteration 9.
+
+## Offline verification evidence (2026-07-20)
+
+- `mvn clean verify`: 564 tests, 0 failures, 0 errors, 4 expected skips; build successful.
+- `mvn package`: build successful and produced the executable shaded JAR.
+- Root, `passport gate`, and `passport insights` help commands exited 0.
+- `jetbrains-plugin\gradlew.bat clean test buildPlugin --rerun-tasks --console=plain`: 183 tests,
+  0 failures, 0 errors, 4 expected platform skips; plugin package built successfully.
+- Deterministic tests cover source-free trailer contents, unchecked per-commit consent, two matching fresh
+  staged-gate reads, a final commit-message reread, conflicts, and responsive Cockpit accessibility.
+- Disposable gate and insights checks remained source-free and did not invoke Codex.
+- Exact IDEA 261/262 Plugin Verifier and installed-plugin acceptance remain pending. Iterations 8.13-8.16
+  therefore remain unchecked in the implementation checklist.

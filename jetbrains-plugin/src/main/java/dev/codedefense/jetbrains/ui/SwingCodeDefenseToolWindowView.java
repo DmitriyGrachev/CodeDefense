@@ -1,11 +1,11 @@
 package dev.codedefense.jetbrains.ui;
 
-import dev.codedefense.jetbrains.process.CodeDefenseLauncher.Selector;
-import dev.codedefense.jetbrains.gate.StagedGateView;
 import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
-import dev.codedefense.jetbrains.process.EvidenceLocationView;
+import dev.codedefense.jetbrains.gate.StagedGateView;
 import dev.codedefense.jetbrains.insights.LearningRadarPanel;
 import dev.codedefense.jetbrains.insights.RepositoryInsightsView;
+import dev.codedefense.jetbrains.process.CodeDefenseLauncher.Selector;
+import dev.codedefense.jetbrains.process.EvidenceLocationView;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
@@ -14,8 +14,10 @@ import java.awt.event.KeyEvent;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
-import javax.swing.JButton;
 import javax.swing.AbstractAction;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -23,9 +25,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
-import javax.swing.JCheckBox;
 import javax.swing.KeyStroke;
-import javax.swing.BoxLayout;
 
 public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWindowView {
     private final JPanel root = new JPanel(new BorderLayout(8, 8));
@@ -45,6 +45,7 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     private final JButton decline = new JButton("Decline");
     private final JTextArea output = new JTextArea();
     private final JPanel evidencePanel = new JPanel();
+    private final JPanel evidenceSection = new JPanel();
     private final LearningRadarPanel learningRadar = new LearningRadarPanel();
     private final JTextField answer = new JTextField();
     private final JButton submit = new JButton("Answer");
@@ -55,46 +56,128 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
     private String passportPath;
 
     public SwingCodeDefenseToolWindowView() {
+        root.setName("codeDefense.cockpit");
+        root.getAccessibleContext().setAccessibleName("CodeDefense cockpit");
         selector.setName("codeDefense.changeSelector");
+        selector.getAccessibleContext().setAccessibleName("Change kind");
+        selectorValue.setName("codeDefense.changeIdentifier");
+        selectorValue.getAccessibleContext().setAccessibleName("Change identifier");
+        focus.setName("codeDefense.defenseFocus");
+        focus.getAccessibleContext().setAccessibleName("Defense focus");
         preview.setName("codeDefense.previewDefense");
         gateBadge.setName("codeDefense.gateBadge");
         gateSummary.setName("codeDefense.gateSummary");
+        gateBadge.getAccessibleContext().setAccessibleName(
+                "CodeDefense staged gate: UNAVAILABLE. Status unavailable");
+        gateSummary.getAccessibleContext().setAccessibleName("Status unavailable");
+        output.setName("codeDefense.sessionOutput");
+        output.getAccessibleContext().setAccessibleName("Defense session output");
+        answer.setName("codeDefense.answer");
+        answer.getAccessibleContext().setAccessibleName("Answer to the current question");
         evidencePanel.setName("codeDefense.evidencePanel");
         evidencePanel.setLayout(new BoxLayout(evidencePanel, BoxLayout.Y_AXIS));
-        evidencePanel.setVisible(false);
+        evidencePanel.getAccessibleContext().setAccessibleName("Current question evidence list");
+
         JPanel gate = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        gate.add(new JLabel("Staged Passport:")); gate.add(gateBadge); gate.add(gateSummary);
+        gate.setName("codeDefense.liveGate");
+        gate.getAccessibleContext().setAccessibleName("CodeDefense live staged Passport gate");
+        gate.add(new JLabel("Staged Passport:"));
+        gate.add(gateBadge);
+        gate.add(gateSummary);
+
         JPanel selectors = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        selectors.add(new JLabel("Change:")); selectors.add(selector); selectors.add(selectorValue);
-        selectors.add(new JLabel("Focus:")); selectors.add(focus);
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        actions.add(preview); actions.add(start); actions.add(cancel); actions.add(refresh);
-        actions.add(defendStaged); actions.add(openPassport);
+        selectors.setName("codeDefense.defenseSelectors");
+        JLabel changeLabel = new JLabel("Change:");
+        changeLabel.setLabelFor(selector);
+        JLabel focusLabel = new JLabel("Focus:");
+        focusLabel.setLabelFor(focus);
+        selectors.add(changeLabel);
+        selectors.add(selector);
+        selectors.add(selectorValue);
+        selectors.add(focusLabel);
+        selectors.add(focus);
+
+        JPanel sessionActions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        sessionActions.setName("codeDefense.sessionActions");
+        sessionActions.add(preview);
+        sessionActions.add(start);
+        sessionActions.add(cancel);
+        JPanel repositoryActions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        repositoryActions.setName("codeDefense.repositoryActions");
+        repositoryActions.add(refresh);
+        repositoryActions.add(defendStaged);
+        repositoryActions.add(openPassport);
+
         JPanel confirmation = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        confirmation.add(accept); confirmation.add(decline);
+        confirmation.setName("codeDefense.confirmationActions");
+        confirmation.getAccessibleContext().setAccessibleName("One-shot source confirmation");
+        confirmation.add(accept);
+        confirmation.add(decline);
         JPanel input = new JPanel(new BorderLayout(4, 4));
+        input.setName("codeDefense.answerControls");
         input.add(answer, BorderLayout.CENTER);
         JPanel inputButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        inputButtons.add(submit); inputButtons.add(skip); input.add(inputButtons, BorderLayout.EAST);
+        inputButtons.add(submit);
+        inputButtons.add(skip);
+        input.add(inputButtons, BorderLayout.EAST);
         JPanel south = new JPanel(new BorderLayout());
-        south.add(confirmation, BorderLayout.NORTH); south.add(input, BorderLayout.SOUTH);
+        south.setName("codeDefense.sessionInteraction");
+        south.add(confirmation, BorderLayout.NORTH);
+        south.add(input, BorderLayout.SOUTH);
+
         output.setEditable(false);
         output.setLineWrap(true);
         output.setWrapStyleWord(true);
         JPanel provenanceControls = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        provenanceControls.add(provenance); provenanceControls.add(new JLabel("Thread ID:"));
-        provenanceControls.add(threadId); provenanceControls.add(historyConsent);
+        provenanceControls.setName("codeDefense.provenanceControls");
+        provenanceControls.add(provenance);
+        JLabel threadLabel = new JLabel("Thread ID:");
+        threadLabel.setLabelFor(threadId);
+        provenanceControls.add(threadLabel);
+        provenanceControls.add(threadId);
+        provenanceControls.add(historyConsent);
         provenanceControls.setVisible("true".equalsIgnoreCase(
                 System.getenv("CODEDEFENSE_EXPERIMENTAL_CODEX_PROVENANCE")));
-        JPanel north = new JPanel(); north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
-        north.add(gate); north.add(learningRadar); north.add(selectors); north.add(actions);
+
+        JPanel north = new JPanel();
+        north.setName("codeDefense.cockpitHeader");
+        north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
+        north.add(gate);
+        north.add(selectors);
+        north.add(sessionActions);
+        north.add(repositoryActions);
         north.add(provenanceControls);
         root.add(north, BorderLayout.NORTH);
-        JPanel center = new JPanel(new BorderLayout(4, 4));
-        center.add(new JScrollPane(output), BorderLayout.CENTER);
-        center.add(evidencePanel, BorderLayout.SOUTH);
+
+        JPanel session = new JPanel(new BorderLayout(4, 4));
+        session.setName("codeDefense.sessionArea");
+        session.getAccessibleContext().setAccessibleName("CodeDefense defense session");
+        JLabel sessionHeading = new JLabel("Defense session");
+        sessionHeading.setLabelFor(output);
+        session.add(sessionHeading, BorderLayout.NORTH);
+        session.add(new JScrollPane(output), BorderLayout.CENTER);
+
+        evidenceSection.setName("codeDefense.evidenceSection");
+        evidenceSection.getAccessibleContext().setAccessibleName("Evidence for the current question");
+        evidenceSection.setLayout(new BorderLayout(4, 4));
+        JLabel evidenceHeading = new JLabel("Evidence for current question");
+        evidenceHeading.setLabelFor(evidencePanel);
+        evidenceSection.add(evidenceHeading, BorderLayout.NORTH);
+        evidenceSection.add(evidencePanel, BorderLayout.CENTER);
+        evidenceSection.setVisible(false);
+
+        learningRadar.getAccessibleContext().setAccessibleName("Repository-local learning radar");
+        JPanel center = new JPanel(new BorderLayout(4, 8));
+        center.setName("codeDefense.cockpitBody");
+        center.add(session, BorderLayout.CENTER);
+        center.add(learningRadar, BorderLayout.SOUTH);
         root.add(center, BorderLayout.CENTER);
-        root.add(south, BorderLayout.SOUTH);
+
+        JPanel sessionDetails = new JPanel();
+        sessionDetails.setLayout(new BoxLayout(sessionDetails, BoxLayout.Y_AXIS));
+        sessionDetails.add(evidenceSection);
+        sessionDetails.add(south);
+        session.add(sessionDetails, BorderLayout.SOUTH);
         setSessionActive(false);
     }
 
@@ -195,15 +278,20 @@ public final class SwingCodeDefenseToolWindowView implements CodeDefenseToolWind
             });
             evidencePanel.add(item);
         }
-        evidencePanel.setVisible(!locations.isEmpty());
-        evidencePanel.revalidate();
-        evidencePanel.repaint();
+        evidenceSection.setVisible(!locations.isEmpty());
+        refreshEvidenceLayout();
     }
     @Override public void clearEvidence() {
         evidencePanel.removeAll();
-        evidencePanel.setVisible(false);
+        evidenceSection.setVisible(false);
+        refreshEvidenceLayout();
+    }
+
+    private void refreshEvidenceLayout() {
         evidencePanel.revalidate();
         evidencePanel.repaint();
+        evidenceSection.revalidate();
+        evidenceSection.repaint();
     }
     @Override public void showRepositoryInsights(RepositoryInsightsView value) {
         learningRadar.showInsights(value);

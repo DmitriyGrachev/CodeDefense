@@ -12,7 +12,7 @@ public final class CodeDefenseCheckinHandlerFactory extends CheckinHandlerFactor
     public CheckinHandler createHandler(CheckinProjectPanel panel, CommitContext context) {
         Objects.requireNonNull(panel, "panel");
         Objects.requireNonNull(context, "context");
-        return CodeDefenseCheckinHandler.forProject(panel.getProject(),
+        return CodeDefenseCheckinHandler.forProject(panel.getProject(), panel,
                 CommitModeDetector.forCommit(panel, context));
     }
 }

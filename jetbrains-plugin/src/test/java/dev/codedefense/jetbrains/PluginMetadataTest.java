@@ -67,6 +67,12 @@ class PluginMetadataTest {
         String detector = Files.readString(Path.of(
                 "src/main/java/dev/codedefense/jetbrains/gate/CommitModeDetector.java"),
                 StandardCharsets.UTF_8);
+        String factory = Files.readString(Path.of(
+                "src/main/java/dev/codedefense/jetbrains/gate/CodeDefenseCheckinHandlerFactory.java"),
+                StandardCharsets.UTF_8);
+        String option = Files.readString(Path.of(
+                "src/main/java/dev/codedefense/jetbrains/commit/PassportTrailerCommitOption.java"),
+                StandardCharsets.UTF_8);
 
         assertTrue(handler.contains("ProgressManager"));
         assertTrue(handler.contains("CodeDefenseProjectGateService"));
@@ -75,8 +81,11 @@ class PluginMetadataTest {
         assertFalse(handler.contains("ProcessBuilder"));
         assertFalse(handler.contains("codex"));
         assertFalse(handler.contains("git "));
-        assertFalse(handler.toLowerCase().contains("trailer"));
-        assertFalse(handler.contains("setCommitMessage"));
+        assertTrue(handler.contains("PassportCommitTrailer"));
+        assertTrue(factory.contains("CheckinProjectPanel"));
+        assertTrue(handler.contains("commitMessage.set("));
+        assertFalse(option.contains("CodeDefenseSettings"));
+        assertFalse(option.contains("diffFingerprint"));
         assertTrue(detector.contains("CheckinProjectPanel"));
         assertTrue(detector.contains("CommitContext"));
         assertTrue(detector.contains("GitStageCommitWorkflowHandler"));

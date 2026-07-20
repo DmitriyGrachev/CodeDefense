@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public final class CommitPassportContinuityChecker {
+public final class CommitPassportContinuityChecker implements PassportContinuityCheck {
     private final GitCommitRangeReader rangeReader;
     private final GitCliChangeSource changeSource;
     private final PassportTrailerParser trailerParser;
@@ -19,7 +19,7 @@ public final class CommitPassportContinuityChecker {
         this.trailerParser = Objects.requireNonNull(trailerParser, "trailerParser");
     }
 
-    public PassportContinuityResult check(Path repository, String base, String head) {
+    @Override public PassportContinuityResult check(Path repository, String base, String head) {
         List<CommitContinuityResult> results = new ArrayList<>();
         for (GitRangeCommit commit : rangeReader.read(repository, base, head)) {
             PassportTrailer trailer = trailerParser.parse(commit.message());

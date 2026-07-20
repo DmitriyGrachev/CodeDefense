@@ -27,7 +27,7 @@ import picocli.CommandLine.Spec;
         subcommands = {PassportShowCommand.class, PassportListCommand.class,
                 PassportVerifyCommand.class, PassportExportCommand.class, PassportTimelineCommand.class,
                 PassportHandoffCommand.class, PassportGateCommand.class, PassportInsightsCommand.class,
-                PassportCoverageCommand.class})
+                PassportCoverageCommand.class, PassportCiCheckCommand.class})
 public final class PassportCommand implements java.util.concurrent.Callable<Integer> {
     private static final String EXPIRATION_EXPLANATION =
             "A Change Passport is expired when the staged Git index no longer matches its captured identity.";

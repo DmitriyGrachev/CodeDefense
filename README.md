@@ -182,13 +182,13 @@ Passports and proof output exclude staged source, diffs, blobs, answers, raw mod
 
 ### Evidence Coverage Map
 
-Iteration 8.18 records which bounded changed hunks were referenced by the three primary defense questions. `passport coverage .` renders the latest current map in text or deterministic JSON. The IntelliJ bridge protocol 3 streams cumulative coverage after each primary question and shows a separate **Evidence Coverage** card with clickable hunk locations; unreferenced measurable hunks appear first.
+CodeDefense records which bounded changed hunks were referenced by the three primary defense questions. `passport coverage .` renders the latest current map in text or deterministic JSON. The IntelliJ bridge streams cumulative coverage after each primary question and shows a separate **Evidence Coverage** card with clickable hunk locations; unreferenced measurable hunks appear first.
 
 Coverage is an evidence-use signal, not correctness, safety, or test coverage. It never changes the Java-owned score or readiness. The persisted sidecar contains only the exact Passport fingerprint, portable relative paths, hunk ordinals/ranges, reference state, and fixed category IDs. It contains no source, diff text, question text, answers, feedback, reasons, raw model output, or absolute paths.
 
 ### GitHub Actions Passport continuity
 
-Iteration 8.19 adds the source-free, model-free `passport ci-check` command and an advisory example workflow at `.github/workflows/codedefense-passport.yml`. The workflow checks out full history, builds with Java 21, compares each final `CodeDefense-Passport: sha256:<hash>` commit trailer with the deterministic parent-to-commit fingerprint, and writes a bounded summary to the GitHub Step Summary. It uses `contents: read`, invokes no Codex process, uses no API key, and uploads no repository content or Passport artifact.
+CodeDefense adds the source-free, model-free `passport ci-check` command and an advisory example workflow at `.github/workflows/codedefense-passport.yml`. The workflow checks out full history, builds with Java 21, compares each final `CodeDefense-Passport: sha256:<hash>` commit trailer with the deterministic parent-to-commit fingerprint, and writes a bounded summary to the GitHub Step Summary. It uses `contents: read`, invokes no Codex process, uses no API key, and uploads no repository content or Passport artifact.
 
 `--policy advisory` returns success for matched, missing, and mismatched trailers while still reporting them. `--policy required` returns success only when every checked commit matches. Both policies fail when history cannot be checked safely. Ranges are limited to 50 non-root, non-merge commits; shallow or unavailable history is rejected. Trailer possession is not authentication and can be forged. Fingerprint continuity is not identity, correctness, safety, merge approval, or deployment approval.
 
@@ -204,7 +204,7 @@ Gate checks launch only the local metadata adapter. Its deterministic JSON is ca
 
 ## Experimental consented Codex provenance
 
-Iteration 8.12 can compare the exact defended Git hunks with file-change items from one local Codex thread selected by the user. It is disabled by default and requires a process-level kill switch plus three explicit per-run options:
+CodeDefense can also compare the exact defended Git hunks with file-change items from one local Codex thread selected by the user. It is disabled by default and requires a process-level kill switch plus three explicit per-run options:
 
 ```powershell
 $env:CODEDEFENSE_EXPERIMENTAL_CODEX_PROVENANCE = "true"
@@ -217,7 +217,7 @@ java -jar target/codedefense.jar prove --staged . `
 
 CodeDefense launches the installed Codex app-server over local stdio, performs the documented initialize/initialized handshake, and reads only the named thread. It never calls `thread/list`, guesses a recent thread, starts or resumes a turn, sends a model request, or reads Codex session/rollout files directly. The operation is bounded to 15 seconds, 1 MiB per JSONL line, 8 MiB total input, 1,000 relevant items, and 100 relevant paths.
 
-Thread messages, reasoning, commands, tool output, patches, prompts, answers, the raw thread ID, and the thread working directory are transient and are never written to the Passport or receipt. Schema-v4 receipts retain only a domain-validated status, an opaque salted SHA-256 thread identity, the compatible Codex version, selected/matched counts, matched relative paths, and capture time. Older receipts remain schema compatible without provenance.
+Thread messages, reasoning, commands, tool output, patches, prompts, answers, the raw thread ID, and the thread working directory are transient and are never written to the Passport or receipt. Receipts retain only a domain-validated status, an opaque salted SHA-256 thread identity, the compatible Codex version, selected/matched counts, matched relative paths, and capture time. Older receipts remain schema compatible without provenance.
 
 `Exact change match` means only that normalized, secret-redacted file-change evidence in the selected thread is consistent with every eligible defended Git hunk. `Partial path match`, `No match`, and `Unavailable` are informational. No provenance status changes questions, model evaluation, Java-owned scores, readiness, Passport validity, or CURRENT/EXPIRED identity. A match does not prove authorship, exclusive causation, review quality, safety, or that no later human edit occurred.
 
@@ -306,7 +306,7 @@ On Windows, CodeDefense never directly launches `codex.cmd` or the extensionless
 
 ## Codex plugin, skill, and advisory Stop hook
 
-Iteration 8.17 packages CodeDefense as a repository-local Codex plugin. The bundled skill can show the staged Passport status, run a source-free staged preview, display the latest Passport score card, or summarize the repository Learning Radar. It never answers defense questions or starts a source-sending defense automatically. Actual defenses remain explicit, interactive workflows in the CodeDefense IntelliJ Tool Window or CLI.
+CodeDefense is also packaged as a repository-local Codex plugin. The bundled skill can show the staged Passport status, run a source-free staged preview, display the latest Passport score card, or summarize the repository Learning Radar. It never answers defense questions or starts a source-sending defense automatically. Actual defenses remain explicit, interactive workflows in the CodeDefense IntelliJ Tool Window or CLI.
 
 The advisory `Stop` hook checks only the staged Change Passport identity after a Codex turn. It is silent outside a Git repository and when no staged change exists. Otherwise it reports `UNDEFENDED`, `CURRENT`, `EXPIRED`, or `UNAVAILABLE` with a safe next action. These states are educational signals only: they are never approval to merge or deploy. The hook launches the local CodeDefense metadata adapter, never launches `codex exec`, consumes no Codex credits, and emits no source, diff hunks, paths, project names, answers, questions, feedback, scores, readiness, model output, credentials, or user identity.
 
@@ -330,9 +330,9 @@ The bundled POSIX launcher contract is covered offline, but actual launcher acce
 
 ## IntelliJ IDEA plugin
 
-Iteration 8.11 adds a Windows-first CodeDefense Tool Window for IntelliJ IDEA 2026.1 Community and Ultimate modes. The plugin is a passive adapter: it launches the bundled shaded CLI JAR as a child Java process and exchanges bounded, versioned NDJSON over stdin/stdout. Git capture, privacy filtering, Codex access, question generation, scoring, and Passport persistence remain in the CLI. The plugin does not read project source, run Git itself, parse Passport Markdown, or place answers and model text in IDE logs or settings.
+CodeDefense includes a Windows-first Tool Window for IntelliJ IDEA 2026.1 Community and Ultimate editions. The plugin is a passive adapter: it launches the bundled shaded CLI JAR as a child Java process and exchanges bounded, versioned NDJSON over stdin/stdout. Git capture, privacy filtering, Codex access, question generation, scoring, and Passport persistence remain in the CLI. The plugin does not read project source, run Git itself, parse Passport Markdown, or place answers and model text in IDE logs or settings.
 
-Iteration 8.14 extends that bridge with protocol 2 evidence navigation, and Iteration 8.18 adds protocol 3 cumulative Evidence Coverage events. Primary questions carry only one to ten validated portable relative paths and line ranges; follow-ups carry no new evidence. The bridge never includes source snippets, evidence reasons, expected key points, or absolute paths. Protocols 1 and 2 remain decodable, and a CLI that cleanly rejects protocol 3 before any valid bridge event or possible Codex invocation is retried once with protocol 1. There is no fallback after a bridge event, confirmation, question, or any other point where source could have been sent.
+That bridge also supports protocol 2 evidence navigation and protocol 3 cumulative Evidence Coverage events. Primary questions carry only one to ten validated portable relative paths and line ranges; follow-ups carry no new evidence. The bridge never includes source snippets, evidence reasons, expected key points, or absolute paths. Protocols 1 and 2 remain decodable, and a CLI that cleanly rejects protocol 3 before any valid bridge event or possible Codex invocation is retried once with protocol 1. There is no fallback after a bridge event, confirmation, question, or any other point where source could have been sent.
 
 Evidence links are resolved against the real project root before IntelliJ sees the file. Absolute paths, parent traversal, control characters, missing or unreadable files, directories, final symlinks, intermediate symlinks, paths outside the real root, and stale line ranges are not opened. IntelliJ resolves the `VirtualFile` only after those checks and opens a valid location at its cited line without reading or displaying source through the bridge.
 
@@ -356,7 +356,7 @@ Plugin settings contain only the bundled/override CLI choice, an optional valida
 
 ## Credits and opt-in live smoke
 
-Credits are consumed only by real structured `codex exec` requests. The default Maven suite never calls Codex. The Iteration 4 live smoke test is opt-in, submits one small schema-constrained request, and consumes a small amount of Codex credit:
+Credits are consumed only by real structured `codex exec` requests. The default Maven suite never calls Codex. The live smoke test is opt-in, submits one small schema-constrained request, and consumes a small amount of Codex credit:
 
 ```powershell
 .\scripts\live-smoke-test.ps1
@@ -370,6 +370,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-The 0.1.0 release candidate includes the executable CLI, bounded Codex adapter, adaptive interview, reports, embedded sample, exact-change Passports, command center, commit/range defense, attempt timelines, portable source-free handoffs, focus modes, JetBrains Defense Cockpit, advisory commit integration, repository Learning Radar, Codex skill/Stop hook, Evidence Coverage Map, and GitHub Actions Passport continuity. Experimental provenance remains off by default and outside the release acceptance claim. Video, Devpost copy, and final submission-link verification remain tracked as the last Iteration 9 activities.
+The 0.1.0 release candidate includes the executable CLI, bounded Codex adapter, adaptive interview, reports, embedded sample, exact-change Passports, command center, commit/range defense, attempt timelines, portable source-free handoffs, focus modes, JetBrains Defense Cockpit, advisory commit integration, repository Learning Radar, Codex skill/Stop hook, Evidence Coverage Map, and GitHub Actions Passport continuity. Experimental provenance remains off by default and outside the release acceptance claim. Video, Devpost copy, and final submission-link verification are the last remaining steps before submission.
 
-See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).
+See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the implementation checklist](docs/implementation-checklist.md).

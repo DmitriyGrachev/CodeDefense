@@ -1,6 +1,7 @@
 package dev.codedefense.jetbrains.evidence;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Objects;
@@ -9,9 +10,11 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 
 public final class EvidenceCoveragePanel extends JPanel {
     public static final String DISCLAIMER = "Evidence use only — not correctness or safety coverage.";
+    private static final int ROW_VIEWPORT_HEIGHT = 160;
     private final JLabel heading = new JLabel("Evidence Coverage");
     private final JPanel rows = new JPanel();
 
@@ -20,8 +23,15 @@ public final class EvidenceCoveragePanel extends JPanel {
         setName("codeDefense.evidenceCoverage");
         getAccessibleContext().setAccessibleName("Evidence Coverage");
         rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
+        JScrollPane rowsScroll = new JScrollPane(rows,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        rowsScroll.setName("codeDefense.evidenceCoverageRows");
+        rowsScroll.getAccessibleContext().setAccessibleName("Evidence Coverage hunks");
+        rowsScroll.setPreferredSize(new Dimension(0, ROW_VIEWPORT_HEIGHT));
+        rowsScroll.setMinimumSize(new Dimension(0, 0));
         add(heading, BorderLayout.NORTH);
-        add(rows, BorderLayout.CENTER);
+        add(rowsScroll, BorderLayout.CENTER);
         add(new JLabel(DISCLAIMER), BorderLayout.SOUTH);
         setVisible(false);
     }

@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.codedefense.jetbrains.gate.StagedGateView;
 import dev.codedefense.jetbrains.evidence.EvidenceNavigator;
+import dev.codedefense.jetbrains.evidence.EvidenceCoverageView;
 import dev.codedefense.jetbrains.process.EvidenceLocationView;
 import java.awt.BorderLayout;
 import java.awt.Component;
@@ -18,6 +19,7 @@ import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.util.List;
+import java.util.stream.IntStream;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -165,6 +167,29 @@ class SwingCodeDefenseToolWindowViewTest {
             assertTrue(action.isFocusable(), () -> label + " must remain keyboard reachable");
             assertEquals(label, action.getAccessibleContext().getAccessibleName());
         }
+    }
+
+    @Test
+    void largeEvidenceCoverageKeepsTheDefenseSessionUsable() {
+        var view = new SwingCodeDefenseToolWindowView();
+        List<EvidenceCoverageView.Hunk> hunks = IntStream.rangeClosed(1, 30)
+                .mapToObj(index -> new EvidenceCoverageView.Hunk(
+                        "src/File" + index + ".java", index, index, index + 2,
+                        true, index <= 3 ? "REFERENCED" : "UNREFERENCED",
+                        index <= 3 ? List.of("decision") : List.of()))
+                .toList();
+        view.showEvidenceCoverage(new EvidenceCoverageView(30, 30, 3, hunks), ignored ->
+                new EvidenceNavigator.NavigationResult(
+                        EvidenceNavigator.NavigationStatus.OPENED, "Evidence opened."));
+
+        JComponent root = view.component();
+        root.setSize(900, 800);
+        layoutTree(root);
+
+        JPanel session = named(root, JPanel.class, "codeDefense.sessionArea");
+        assertTrue(session.getHeight() >= 200,
+                () -> "Large coverage collapsed the defense session to "
+                        + session.getHeight() + " pixels");
     }
 
     @Test

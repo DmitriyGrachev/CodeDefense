@@ -5,13 +5,13 @@ $TargetRoot = Join-Path $RepositoryRoot "target"
 $StageRoot = Join-Path $TargetRoot "devpost-judge-kit"
 $KitRoot = Join-Path $StageRoot "CodeDefense-Judge-Kit"
 $ScreenshotsRoot = Join-Path $KitRoot "screenshots"
-$Archive = Join-Path $TargetRoot "codedefense-devpost-judge-kit-v0.1.0.zip"
+$Archive = Join-Path $TargetRoot "codedefense-devpost-judge-kit-v0.1.1.zip"
 $MaximumArchiveBytes = 35MB
 
 $RequiredFiles = [ordered]@{
     "codedefense.jar" = Join-Path $TargetRoot "codedefense.jar"
     "codedefense-codex-plugin.zip" = Join-Path $TargetRoot "codedefense-codex-plugin.zip"
-    "codedefense-jetbrains-0.1.0.zip" = Join-Path $RepositoryRoot "jetbrains-plugin\build\distributions\codedefense-jetbrains-0.1.0.zip"
+    "codedefense-jetbrains-0.1.1.zip" = Join-Path $RepositoryRoot "jetbrains-plugin\build\distributions\codedefense-jetbrains-0.1.1.zip"
     "README-JUDGES.md" = Join-Path $RepositoryRoot "docs\devpost\README-JUDGES.md"
 }
 
@@ -52,7 +52,7 @@ foreach ($File in $GalleryFiles) {
 $ChecksumNames = @(
     "codedefense.jar"
     "codedefense-codex-plugin.zip"
-    "codedefense-jetbrains-0.1.0.zip"
+    "codedefense-jetbrains-0.1.1.zip"
 )
 $ChecksumLines = foreach ($Name in $ChecksumNames) {
     $Path = Join-Path $KitRoot $Name

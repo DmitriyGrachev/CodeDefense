@@ -33,7 +33,7 @@ class CodeDefenseToolWindowFactoryTest {
     @Test
     void derivesBundledCliFromPluginClassResource() throws Exception {
         Path pluginRoot = directory.resolve("CodeDefense");
-        Path pluginJar = pluginRoot.resolve("lib").resolve("codedefense-jetbrains-0.1.0.jar");
+        Path pluginJar = pluginRoot.resolve("lib").resolve("codedefense-jetbrains-0.1.1.jar");
         var classResource = URI.create("jar:" + pluginJar.toUri()
                 + "!/dev/codedefense/jetbrains/ui/CodeDefenseToolWindowFactory.class").toURL();
 

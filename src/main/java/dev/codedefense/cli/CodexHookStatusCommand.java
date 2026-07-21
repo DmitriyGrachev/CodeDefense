@@ -12,7 +12,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Spec;
 
-@Command(name = "status", mixinStandardHelpOptions = true, version = "CodeDefense 0.1.0",
+@Command(name = "status", mixinStandardHelpOptions = true, version = "CodeDefense 0.1.1",
         description = "Render source-free staged Passport status for a Codex hook.")
 public final class CodexHookStatusCommand implements Callable<Integer> {
     private final Supplier<? extends StagedPassportGateEvaluator> evaluatorFactory;

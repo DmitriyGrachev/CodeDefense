@@ -26,7 +26,7 @@ class CodexPluginContractTest {
         JsonNode manifest = json(PLUGIN.resolve(".codex-plugin/plugin.json"));
 
         assertEquals("codedefense", manifest.path("name").asText());
-        assertEquals("0.1.0", manifest.path("version").asText());
+        assertEquals("0.1.1", manifest.path("version").asText());
         assertEquals("Show source-free staged Change Passport status and guide explicit CodeDefense workflows.",
                 manifest.path("description").asText());
         assertEquals("./skills/", manifest.path("skills").asText());

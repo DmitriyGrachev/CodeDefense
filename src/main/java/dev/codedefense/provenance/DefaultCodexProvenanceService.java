@@ -69,7 +69,7 @@ public final class DefaultCodexProvenanceService implements CodexProvenanceServi
             CodexEnvironment environment = preflight.checkReady();
             if (!config.supportedCodexVersions().contains(environment.version())) return unavailable(selected);
             try (CodexAppServerClient client = clientFactory.create(environment, root, config)) {
-                client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.0"), true);
+                client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.1"), true);
                 AppServerThread metadata = client.readThread(selectedThread, false);
                 if (!sameRepository(root, metadata.cwd())) {
                     return summary(CodexProvenanceStatus.NO_MATCH, selectedThread, environment.version(),

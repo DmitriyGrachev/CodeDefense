@@ -11,7 +11,7 @@
 
 ## Preflight
 
-1. Use the v0.1.0 JAR and matching JetBrains/Codex plugins.
+1. Use the v0.1.1 JAR and matching JetBrains/Codex plugins.
 2. Close notifications, personal browser tabs, password managers, and unrelated terminals.
 3. Use a disposable staged Java fixture with no secrets or personal data.
 4. Prepare a current Passport and one intentional staged edit that demonstrates `EXPIRED`.
@@ -120,7 +120,7 @@ Repository:
 https://github.com/DmitriyGrachev/CodeDefense
 
 Release:
-https://github.com/DmitriyGrachev/CodeDefense/releases/tag/v0.1.0
+https://github.com/DmitriyGrachev/CodeDefense/releases/tag/v0.1.1
 ```
 
 ## Final upload checklist
@@ -134,4 +134,4 @@ https://github.com/DmitriyGrachev/CodeDefense/releases/tag/v0.1.0
 - [ ] The video does not claim correctness, security, authorship, or merge approval.
 - [ ] YouTube visibility is **Public**.
 - [ ] The title is `CodeDefense — Prove You Understand the Code AI Helped You Write`.
-- [ ] The description links the repository and v0.1.0 release.
+- [ ] The description links the repository and v0.1.1 release.

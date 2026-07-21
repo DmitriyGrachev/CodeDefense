@@ -13,7 +13,7 @@ import picocli.CommandLine.Spec;
 import picocli.CommandLine.Model.CommandSpec;
 
 /** Machine-readable, source-free staged index gate. */
-@Command(name = "gate", mixinStandardHelpOptions = true, version = "CodeDefense 0.1.0",
+@Command(name = "gate", mixinStandardHelpOptions = true, version = "CodeDefense 0.1.1",
         description = "Evaluate the exact staged Git index against local Change Passports.")
 public final class PassportGateCommand implements Callable<Integer> {
     private final StagedPassportGateEvaluator useCase;

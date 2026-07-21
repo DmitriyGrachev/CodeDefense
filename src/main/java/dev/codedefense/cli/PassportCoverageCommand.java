@@ -20,7 +20,7 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Spec;
 
-@Command(name = "coverage", mixinStandardHelpOptions = true, version = "CodeDefense 0.1.0",
+@Command(name = "coverage", mixinStandardHelpOptions = true, version = "CodeDefense 0.1.1",
         description = "Show source-free evidence coverage for the latest Change Passport.")
 public final class PassportCoverageCommand implements Callable<Integer> {
     @FunctionalInterface interface CoverageLoader { EvidenceCoverageView load(Path repository); }

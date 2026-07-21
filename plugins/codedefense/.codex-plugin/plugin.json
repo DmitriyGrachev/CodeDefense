@@ -1,6 +1,6 @@
 {
   "name": "codedefense",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Show source-free staged Change Passport status and guide explicit CodeDefense workflows.",
   "author": {
     "name": "CodeDefense"

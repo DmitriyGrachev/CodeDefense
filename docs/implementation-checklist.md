@@ -16,7 +16,7 @@
 - [x] Iteration 8.9 — portable source-free Change Handoff.
 - [x] Iteration 8.10 — evidence-grounded defense focus modes.
 - [x] Iteration 8.11 — JetBrains plugin over the local bridge protocol.
-- [ ] Iteration 8.12 — experimental consented Codex provenance (implemented behind an off-by-default kill switch; real-thread acceptance deferred from 0.1.0).
+- [ ] Iteration 8.12 — experimental consented Codex provenance (implemented behind an off-by-default kill switch; real-thread acceptance deferred from 0.1.1).
 - [x] Iteration 8.13 — live staged Passport gate and advisory IntelliJ commit check (Windows installed-plugin acceptance verified).
 - [ ] Iteration 8.14 — evidence navigator (implemented, offline-verified, and bundled; installed navigation acceptance deferred).
 - [x] Iteration 8.15 — repository learning radar (Windows installed-plugin rendering verified).

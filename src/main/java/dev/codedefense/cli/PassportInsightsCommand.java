@@ -21,7 +21,7 @@ import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Spec;
 
 /** Machine-readable repository-local learning history. */
-@Command(name = "insights", mixinStandardHelpOptions = true, version = "CodeDefense 0.1.0",
+@Command(name = "insights", mixinStandardHelpOptions = true, version = "CodeDefense 0.1.1",
         description = "Show source-free learning insights for this repository.")
 public final class PassportInsightsCommand implements Callable<Integer> {
     private final InsightsBuilder builder;

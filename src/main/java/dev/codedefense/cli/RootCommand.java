@@ -5,7 +5,7 @@ import picocli.CommandLine.Command;
 @Command(
         name = "codedefense",
         mixinStandardHelpOptions = true,
-        version = "CodeDefense 0.1.0",
+        version = "CodeDefense 0.1.1",
         description = "Prove that you understand your AI-assisted code."
 )
 public final class RootCommand implements Runnable {

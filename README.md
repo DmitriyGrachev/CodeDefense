@@ -299,7 +299,7 @@ Codex also accelerated development of CodeDefense itself: it helped turn review 
 - Secret detection is pattern-based and cannot guarantee that every sensitive value is removed.
 - The JetBrains release targets IntelliJ IDEA `261.*` and `262.*` on Windows; other JetBrains products and operating systems are not claimed.
 - The POSIX Codex plugin launcher is covered by automated contracts, but installed macOS/Linux acceptance remains pending.
-- Experimental Codex thread provenance is disabled by default and excluded from the 0.1.0 acceptance claim.
+- Experimental Codex thread provenance is disabled by default and excluded from the 0.1.1 acceptance claim.
 - Passport trailers prove deterministic fingerprint continuity only; they are not signed and can be forged.
 
 After the hackathon release, likely work is limited to user feedback, additional installed-platform acceptance, and deciding whether signed/source-free team handoffs are valuable. CodeDefense will not become a code generator, employee-ranking system, or automatic approval gate.
@@ -382,6 +382,6 @@ The scripts show the resolved launcher, verify installation and authentication, 
 
 ## Current status
 
-The 0.1.0 release candidate includes the executable CLI, bounded Codex adapter, adaptive interview, reports, embedded sample, exact-change Passports, command center, commit/range defense, attempt timelines, portable source-free handoffs, focus modes, JetBrains Defense Cockpit, advisory commit integration, repository Learning Radar, Codex skill/Stop hook, Evidence Coverage Map, and GitHub Actions Passport continuity. Experimental provenance remains off by default and outside the release acceptance claim. Video, Devpost copy, and final submission-link verification remain tracked as the last Iteration 9 activities.
+The 0.1.1 release includes the executable CLI, bounded Codex adapter, adaptive interview, reports, embedded sample, exact-change Passports, command center, commit/range defense, attempt timelines, portable source-free handoffs, focus modes, JetBrains Defense Cockpit, advisory commit integration, repository Learning Radar, Codex skill/Stop hook, Evidence Coverage Map, and GitHub Actions Passport continuity. Experimental provenance remains off by default and outside the release acceptance claim.
 
 See [the implementation plan](docs/codedefense-mvp-implementation-plan.md) and [the iteration checklist](docs/implementation-checklist.md).

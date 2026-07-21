@@ -17,7 +17,7 @@ class JdkCodexAppServerClientTest {
     @Test
     void performsHandshakeIgnoresNotificationsAndReadsNarrowProjection() {
         try (JdkCodexAppServerClient client = client("fragmented", Duration.ofSeconds(5))) {
-            client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.0"), true);
+            client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.1"), true);
             AppServerThread thread = client.readThread("selected-thread", true);
 
             assertEquals("C:/repo", thread.cwd());
@@ -30,7 +30,7 @@ class JdkCodexAppServerClientTest {
     @Test
     void listsFileChangeItemsAndDrainsLargeStderr() {
         try (JdkCodexAppServerClient client = client("large-stderr", Duration.ofSeconds(5))) {
-            client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.0"), true);
+            client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.1"), true);
             assertEquals(1, client.listThreadItems("selected-thread", 100).size());
         }
     }
@@ -38,7 +38,7 @@ class JdkCodexAppServerClientTest {
     @Test
     void pagesExperimentalItemsToTheRequestedBound() {
         try (JdkCodexAppServerClient client = client("paged", Duration.ofSeconds(5))) {
-            client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.0"), true);
+            client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.1"), true);
             List<AppServerThreadItem> items = client.listThreadItems("selected-thread", 2);
             assertEquals(List.of("src/App.java", "src/B.java"), items.stream()
                     .map(item -> item.fileChanges().getFirst().path()).toList());
@@ -48,7 +48,7 @@ class JdkCodexAppServerClientTest {
     @Test
     void reportsUnsupportedExperimentalMethodWithoutPayload() {
         try (JdkCodexAppServerClient client = client("unsupported", Duration.ofSeconds(5))) {
-            client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.0"), true);
+            client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.1"), true);
             AppServerProtocolException exception = assertThrows(AppServerProtocolException.class,
                     () -> client.listThreadItems("selected-thread", 100));
             assertEquals(AppServerProtocolException.Kind.UNSUPPORTED_METHOD, exception.kind());
@@ -60,12 +60,12 @@ class JdkCodexAppServerClientTest {
     void terminatesOnTimeoutAndRejectsInvalidUtf8Safely() {
         try (JdkCodexAppServerClient client = client("timeout", Duration.ofMillis(150))) {
             AppServerProtocolException exception = assertThrows(AppServerProtocolException.class,
-                    () -> client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.0"), true));
+                    () -> client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.1"), true));
             assertEquals(AppServerProtocolException.Kind.TIMEOUT, exception.kind());
         }
         try (JdkCodexAppServerClient client = client("invalid-utf8", Duration.ofSeconds(5))) {
             AppServerProtocolException exception = assertThrows(AppServerProtocolException.class,
-                    () -> client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.0"), true));
+                    () -> client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.1"), true));
             assertEquals(AppServerProtocolException.Kind.INVALID_RESPONSE, exception.kind());
         }
     }
@@ -74,7 +74,7 @@ class JdkCodexAppServerClientTest {
     void rejectsNonzeroExitWithoutRetainingServerDiagnostic() {
         try (JdkCodexAppServerClient client = client("nonzero", Duration.ofSeconds(5))) {
             AppServerProtocolException exception = assertThrows(AppServerProtocolException.class,
-                    () -> client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.0"), true));
+                    () -> client.initialize(new AppServerClientInfo("codedefense", "CodeDefense", "0.1.1"), true));
             assertEquals(AppServerProtocolException.Kind.EXECUTION_FAILED, exception.kind());
             assertFalse(exception.getMessage().contains("PRIVATE-SERVER-DIAGNOSTIC"));
         }

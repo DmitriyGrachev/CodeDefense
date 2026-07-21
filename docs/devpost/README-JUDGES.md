@@ -8,7 +8,7 @@ the final score, Git fingerprint, Passport state, and CI exit code.
 
 Requirements: Java 21 only.
 
-1. Download `codedefense.jar` and `SHA256SUMS.txt` from the [v0.1.0 release](https://github.com/DmitriyGrachev/CodeDefense/releases/tag/v0.1.0).
+1. Download `codedefense.jar` and `SHA256SUMS.txt` from the [v0.1.1 release](https://github.com/DmitriyGrachev/CodeDefense/releases/tag/v0.1.1).
 2. Verify the checksum.
 3. Run:
 
@@ -41,7 +41,7 @@ context and may consume Codex credits.
 ## JetBrains plugin
 
 Use IntelliJ IDEA build `261.*` or `262.*` on Windows. Install
-`codedefense-jetbrains-0.1.0.zip` through **Settings → Plugins → Install Plugin
+`codedefense-jetbrains-0.1.1.zip` through **Settings → Plugins → Install Plugin
 from Disk**, restart IntelliJ IDEA, open **View → Tool Windows → CodeDefense**,
 and stage a supported source change before selecting **Preview defense**.
 
@@ -59,7 +59,7 @@ then ask `@codedefense` for the source-free status of the staged change.
 - Passport CI check: Ubuntu GitHub Actions runner, source-free and model-free.
 
 Installed macOS/Linux plugin acceptance and experimental Codex provenance are
-outside the v0.1.0 acceptance claim.
+outside the v0.1.1 acceptance claim.
 
 ## Privacy and interpretation
 
@@ -72,6 +72,6 @@ correctness, security, authorship, or approval to merge or deploy.
 ## Links
 
 - Repository: https://github.com/DmitriyGrachev/CodeDefense
-- Release: https://github.com/DmitriyGrachev/CodeDefense/releases/tag/v0.1.0
+- Release: https://github.com/DmitriyGrachev/CodeDefense/releases/tag/v0.1.1
 - Build history: https://github.com/DmitriyGrachev/CodeDefense/actions
 - Demo video: added after public YouTube publication
